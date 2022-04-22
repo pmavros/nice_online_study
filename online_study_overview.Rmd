@@ -1,0 +1,132 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook with the analysis of the NICE online study.
+
+```{r}
+library(tidyverse)
+
+```
+
+### Load data
+
+```{r}
+data <- read_csv("../5_data/nice-online-experiment-Prolific_220419.csv")
+data
+```
+
+Study duration
+
+```{r}
+data %>% 
+  group_by(recorded_at) %>% 
+  slice(n()) %>% 
+  transmute(minutes_elapsed = time_elapsed / 60000, 
+            minutes_elapsed = round(minutes_elapsed, 1))
+```
+
+### Demographics 
+
+```{r}
+library(jsonlite)
+demographics <- data %>% 
+  select(task, stimulus, response) %>% 
+  filter(task == "demographics",
+         !is.na(response))
+
+ demographics %>% 
+   mutate(data = map(response, fromJSON)) %>% 
+   unnest_wider(data) %>% 
+   select(-stimulus, -response)
+ 
+   
+```
+
+### Videos
+
+We need to check if the videos played correctly. Are the video duration times reasonable \~ 30 seconds? By design the experiment serves each video for 30 seconds, but if the video is not playing the duration time should be longer.
+
+How do we deal with the focus?
+
+```{r}
+data %>% 
+  filter(!is.na(PROLIFIC_PID), task == "stimulus") %>% 
+  select(trial_index, time_elapsed, event, trial, time)
+```
+
+Willingness to walk
+
+```{r}
+data %>% 
+  filter(!is.na(PROLIFIC_PID), task == "willingnesstowalk") %>% 
+  mutate(response = as.numeric(response)) %>% 
+  ggplot(aes(response)) +
+  geom_density()
+```
+
+```{r}
+data %>% 
+  filter(!is.na(PROLIFIC_PID), task == "presence") %>% 
+  mutate(response = as.numeric(response)) %>% 
+  ggplot(aes(response)) +
+  geom_density()
+```
+
+```{r}
+data %>% 
+  filter(!is.na(PROLIFIC_PID), task == "being_away") %>% 
+  mutate(response = as.numeric(response)) %>% 
+  ggplot(aes(response)) +
+  geom_density()
+```
+
+```{r}
+# aesthetic_visit
+
+data %>% 
+  filter(!is.na(PROLIFIC_PID), task == "aesthetic_visit") %>% 
+  select(response) %>% 
+  mutate(response = map(response, fromJSON)) %>%
+  unnest_longer(response) %>% 
+  mutate(response = as.numeric(response)) %>% 
+  ungroup() %>% 
+  data.frame() %>% 
+  ggplot(aes(x = response_id,y = response, colour = response_id)) +
+  geom_boxplot() +
+  geom_jitter(width = .2)
+
+```
+
+```{r}
+# emotions
+```
+
+```{r}
+data %>% 
+  rowid_to_column() %>% 
+  filter(!is.na(PROLIFIC_PID), task == "aesthetic_visit" | (task == "willingnesstowalk" & stimulus == "Would you like to walk on this place?<p>") ) %>% 
+  select(PROLIFIC_PID, video, task, rowid, response) 
+  # filter(!is.na(response)) %>% 
+  pivot_wider()
+  
+mutate(response = map(response, fromJSON)) %>%
+  unnest_longer(response) %>% 
+  mutate(response = as.numeric(response)) %>% 
+  ungroup() %>% 
+  data.frame() %>% 
+  ggplot(aes(x = response_id,y = response, colour = response_id)) +
+  geom_boxplot() +
+  geom_jitter(width = .2)
+```
+```{r}
+
+data %>% 
+  filter(!is.na(video), !is.na(PROLIFIC_PID)) %>% 
+  distinct(video,PROLIFIC_PID ) %>% 
+  group_by(video) %>% 
+  tally()
+
+```
+
