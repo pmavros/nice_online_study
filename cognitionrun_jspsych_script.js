@@ -479,6 +479,10 @@ var my_params = {
   player_id: null,
   collision_count: 0,
   collision_ids: [],
+  up_timestamps: [],
+  down_timestamps: [],
+  start_time: 0,
+  sf_duration: 0
 };
 
 // export 
@@ -492,25 +496,28 @@ const text_disp = document.getElementById("text");
 //     monitor.innerText = "running";
 // }
 
+
+var new_collisions = [];
+  
 function collisions(agent) {
   var neighbors = tree.agentsWithinDistance(
     agent,
     collision_threshold
   );
 
-  var new_collisions = [];
+  new_collisions = [];
   
   if (neighbors.length > 0) {
     neighbors.forEach(function (e) {
       if (my_params.collision_ids.indexOf(e.id) === -1) {
-        new_collisions.push(e.id);
+        my_params.collision_ids.push(e.id);
       } else {
         // console.log("collision with same");
       }
     });
 
-    my_params.collision_ids = new_collisions;
-    my_params.collision_count =  my_params.collision_count + new_collisions.length;
+    console.log(my_params.collision_ids);
+    my_params.collision_count =  my_params.collision_ids.length;
     monitor.innerText = "collisions: " + my_params.collision_count;
   }
 }
@@ -640,11 +647,14 @@ function social_force(pos, vel, neighbors) {
   // This or time based in main
   if ((agent.id === my_params.player_id) & (pos.x > width*0.99)){
     stop();
+
     jsPsych.finishTrial(
       {
         collision_count: my_params.collision_count,
-        up_timestamps: up_timestamps,
-        down_timestamps: down_timestamps
+        up_timestamps: my_params.up_timestamps.toString(),
+        down_timestamps: my_params.down_timestamps.toString(),
+        sf_duration: my_params.sf_duration,
+        collisions_ids: my_params.collision_ids.toString()
       
     });
   } 
@@ -657,8 +667,7 @@ function social_force(pos, vel, neighbors) {
   };
 }
 
-var up_timestamps = [];
-var down_timestamps = []; 
+
 function social_force_main(FLOCK_SIZE, TASK_DURATION){
   // Stop any previous animation request
   environment.clear();
@@ -666,17 +675,20 @@ function social_force_main(FLOCK_SIZE, TASK_DURATION){
   
   // This needs to be put somewhere else
   document.addEventListener("keydown", logKey);
-  // console.log(FLOCK_SIZE +" "+ TASK_DURATION);
+  console.log(FLOCK_SIZE +" "+ TASK_DURATION);
+  console.log(my_params.up_timestamps);
   
-  up_timestamps.length = 0;
-  down_timestamps.length = 0;
-  
-  up_timestamps.push(environment.time); 
-  down_timestamps.push(environment.time); 
+  my_params.start_time = environment.time;
+
+  my_params.up_timestamps.length = 0;
+  my_params.down_timestamps.length = 0;
+
+  my_params.up_timestamps.push(environment.time - my_params.start_time); 
+  my_params.down_timestamps.push(environment.time - my_params.start_time); 
 
   
   var monitor = document.createElement("p");
-  var text = document.createTextNode("running");
+  var text = document.createTextNode("collisions: 0");
   monitor.setAttribute('id', 'monitor');
   monitor.appendChild(text);
   
@@ -796,6 +808,7 @@ var sf_running = false;
   function stop() {
     
     // console.log("stop sf");
+    my_params.sf_duration = environment.time - my_params.start_time;
     sf_running = false;
     my_params.player_id = null;
     if (requestId) {
@@ -811,13 +824,13 @@ function logKey(e) {
     
     const p = environment.getAgentById(my_params.player_id);
     if (e.code === "ArrowUp") {
-      up_timestamps.push(environment.time); 
+      my_params.up_timestamps.push(environment.time - my_params.start_time); 
       p.set("y", p.getData().y - 5);
       // console.log(environment.time);
     }
   
     if (e.code === "ArrowDown") {
-      down_timestamps.push(environment.time);
+      my_params.down_timestamps.push(environment.time - my_params.start_time);
       // const p = environment.getAgentById(my_params.player_id);
       p.set("y", p.getData().y + 5);
       //console.log(environment.time);
@@ -1506,6 +1519,7 @@ var end_experiment = {
   post_trial_gap: 100, 
   data: { task: 'end_experiment' }
 };
+
 
 timeline.push(welcome);
 
