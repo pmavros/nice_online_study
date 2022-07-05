@@ -3,10 +3,11 @@ library(tidyverse)
 library(tidyr)
 library(jsonlite)
 library(tidyjson)
+library(purrr)
 
 preprocess_NICE <- function(file){
   # Read Data (replace path with your own file directory)
-  df <- read.csv('Prolific_data/nice-online-experiment-working 20220623.csv')
+  df <- read.csv(file)
   
   # Get Variables we want 
   scales <- c('willingnesstowalk', 
@@ -72,28 +73,38 @@ preprocess_NICE <- function(file){
               "When in an elevator I am tense if people look at me.",
               "I can feel conspicuous standing in a queue.")
   
-  ##TODO: Add the rest of the scales here  
+  ##ToDo: Add the rest of the scales here  
   
   # Extract all JSON Results 
   JSON_measures <- c('emotions', 'sps_sf')
   
-  all_responses <- data.frame(df$subject_id)
-  colnames(all_responses) = 'subject_id'
+  # all_responses <- data.frame(df$subject_id)
+ #  colnames(all_responses) = 'subject_id'
   
+  scale_list <- list()
   for (i in JSON_measures){
     var <- extract_response(as.character(i))
     out <- merge(data.frame(get(i)), var)
     colnames(out)[1] = as.character(i)
-    all_responses <- merge(all_responses, out, by='subject_id', all=TRUE)
+    #assign(paste0("scale_", as.name(i)), out)
+    scale_list[[i]] <- out
   } 
   
-  # Merge all the data into one dataframe 
-  all_data <- merge(all_responses, data, by='subject_id', all=TRUE)
+  # Function to Merge Dataframes quickly without looping 
+  mymerge <- function(df1, df2){
+    merge(df1,df2, by='subject_id', all=TRUE)
+  }
+  
+  all_responses <- Reduce(mymerge, scale_list)
+  
+  # Merge all the data into one data frame 
+  all_data <- Reduce(mymerge,list(all_responses, data))
   all_data
 
 }
 
-
+# RUN
+df_all <- preprocess_NICE('Prolific_data/nice-online-experiment-working 20220623.csv')
 
   
   
