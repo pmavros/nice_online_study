@@ -5,48 +5,49 @@ library(jsonlite)
 library(tidyjson)
 library(purrr)
 
+# This is a preprocessing function to extract variables into a single data frame for the NICE online study. 
+# Variables to extract can be customized by commenting out or inserting your own variables in `scales`
+# Nested JSON-formatted results can be extracted from .csv files using this function
+
 preprocess_NICE <- function(file){
   # Read Data (replace path with your own file directory)
   df <- read.csv(file)
   
-  # Get Variables we want 
-  scales <- c('willingnesstowalk', 
-              'emotions', 
-              'presence', 
-              'being_away',
-              'aesthetic_visit',
-              'feedback',
-              'sf_task',
-              'sf_reaction_stress',
-              'sf_reaction_enjoyable',
-              'preference_for_crowds',
-              'nss_sf',
-              'sias6_sf',
-              'sps_sf',
-              'ipip6'
-  )  
+  # Get all variables we want
   
-  data <- df[df$task %in% scales, ] |>
-    select(subject_id, condition, time_elapsed, task, rt)
+  ## List of non-JSON formatted scales to extract
+  nonJSON_scales <- c('willingnesstowalk', 
+                        'presence', 
+                        'being_away',
+                        'sf_task',
+                        'sf_reaction_stress',
+                        'sf_reaction_enjoyable',
+                        'preference_for_crowds'
+                        )
+                                
+  data <- df[df$task %in% nonJSON_scales, ] |>
+    select(subject_id, condition, task, rt) 
 
-  # Function to extract nested JSON survey answers from CSV file
+  # Function to extract nested **JSON** survey answers from CSV file
   extract_response <- function (task){
        response <- df  |>
             filter({{task}}==task, !is.na(response), response!='null') |>
-            select(response, subject_id) |>
+            select(response, subject_id, rt) |>
             group_by(subject_id) |>
             unnest(cols=response) |>
             separate_rows(response, sep=',') |>
             separate(response, into = c('Qn', 'Ans'), sep=':') |>
-            select(Ans, subject_id)|>
+            select(Ans, subject_id, rt)|>  # include any other variables here
             as.data.frame() |>
         #pull('ans', 'subject_id') |>
             mutate(across(everything(),~ gsub("[[:punct:]]", "", .))) |>
-       rename(!!paste0(as.character(task), '_Ans'):=Ans)
+       rename(!!paste0(as.character(task), '_Ans'):=Ans) |>
+       rename(!!paste0(as.character(task), '_RT'):=rt)   
+       
        response
   }
 
-  # Measures Used that display JSON-format results
+  # Measures Used that display **JSON-format** results
   aesthetic_visit <- c("narrow-wide",
                           "empty-crowded",
                           "chaotic-order",
@@ -75,7 +76,7 @@ preprocess_NICE <- function(file){
   
   ##ToDo: Add the rest of the scales here  
   
-  # Extract all JSON Results 
+  # Extract **JSON measures** that you want here 
   JSON_measures <- c('emotions', 'sps_sf')
   
   # all_responses <- data.frame(df$subject_id)
@@ -103,7 +104,7 @@ preprocess_NICE <- function(file){
 
 }
 
-# RUN
+# RUN =======================
 df_all <- preprocess_NICE('Prolific_data/nice-online-experiment-working 20220623.csv')
 
   
