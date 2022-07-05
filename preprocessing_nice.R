@@ -26,7 +26,7 @@ preprocess_NICE <- function(file){
                         )
                                 
   data <- df[df$task %in% nonJSON_scales, ] |>
-    select(subject_id, condition, task, rt) 
+    select(subject_id, condition, task, response, rt) 
 
   # Function to extract nested **JSON** survey answers from CSV file
   extract_response <- function (task){
