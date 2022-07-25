@@ -32,7 +32,7 @@ const jsPsych = initJsPsych({
     override_safe_mode: true,
     show_progress_bar: false,
     on_interaction_data_update: function(data) {
-      console.log(JSON.stringify(data));
+      // console.log(JSON.stringify(data));
       jsPsych.data.write(data);
     },
     extensions: [
@@ -44,7 +44,7 @@ const jsPsych = initJsPsych({
             /* redirect to prolific for thank you etc
             disabled during the development */
 
-            window.location = "https://app.prolific.co/submissions/complete?cc=3F4C0032"
+            window.location = "https://app.prolific.co/submissions/complete?cc=83E3A6F5"
 
         }
     });
@@ -98,6 +98,10 @@ insertCss(
  
   .top_bordered {	
     border-top: 1px solid black; 
+  }
+  
+  .white_letters {
+    color: white;
   }
   
   .videosize {
@@ -156,6 +160,7 @@ body {
   display:flex;
   width: 100%;
   justify-content: space-between;
+  color: white;
 }
 
 .preamble800 {
@@ -212,13 +217,11 @@ var feedback = {
   }
 }
 
+console.log(stimuli_database);
+console.log(stimuli_database.length);
 
-// CONDITION == 1 -> beauty question first
-// CONDITION == 2 -> willingness to visit first  
-  
-// var images = ['/sam_arousal.png', '/sam_valence.png'];
+if(CONDITION == 16) {CONDITION = 0} 
 
-// console.log(stimuli_database.length);
 /*  subset stimuli */ 
 stimuli_database = stimuli_database.filter((x) => x.testing_group === CONDITION);
 
@@ -397,22 +400,20 @@ timeline.push({
   fullscreen_mode: false
 });
 
-// var browserCheck = {
-//   type: jsPsychBrowserCheck, 
-//   features: ["width", "height", "webaudio", "browser", "browser_version", "mobile", "os", "fullscreen", "vsync_rate", "webcam", "microphone"]
-// };
-
-
 var browserCheck = {
   type: jsPsychBrowserCheck,
+  minimum_width: 1000,
+  minimum_height: 600,
+  features: ["width", "height", "webaudio", "browser", "browser_version", "mobile", "os", "fullscreen", "vsync_rate", "webcam", "microphone"],
   inclusion_function: (data) => {
     console.log(data);
     return ['chrome', 'firefox'].includes(data.browser) && data.mobile === false
   },
   exclusion_message: (data) => {
+    console.log(data);
     if(data.mobile){
       return '<p>You must use a desktop/laptop computer to participate in this experiment.</p>';
-    } else if(!['chrome', 'firefox'].contains(data.browser) ){
+    } else if(!['chrome', 'firefox'].includes(data.browser) ){
       return '<p>You must use Chrome or Firefox as your browser to complete this experiment.</p>'
     }
   }
@@ -940,7 +941,10 @@ var instructions = {
   </br>
   <p>
  
-  Each video lasts around 30 seconds, and at the end of each video, there are few questions.  There are no right or wrong answers, so following your intuition is usually the best.  
+  Each video lasts around <strong> 30 seconds </strong>. Because of the internet connection, the actual loading times of each video can vary slightly. If the videos take too long to load, you might be facing issues with your internet connection.
+  </p>
+  <p>
+  At the end of each video, there are few questions.  There are no right or wrong answers, so following your intuition is usually the best.  
    </p>
   <br>
   We will first do a test run so that you get familiar with the setup. The demo video shows a fish-tank!
@@ -989,8 +993,8 @@ var demo_video = {
     // wait for 3 seconds, 
     let video = document.getElementById('jspsych-video');
     video.onloadeddata = function() {
-    // video is loaded
-          document.getElementById("loading").innerHTML = "";
+      // when video is loaded
+      document.getElementById("loading").innerHTML = "";
     }
   },
   choices: [],
@@ -1138,12 +1142,13 @@ semantic_differential_items = jsPsych.randomization.repeat(semantic_differential
 semantic_differential_items.forEach(function(p) { 
   survey_formatted.push(
   {
-      prompt: '<div class = "likert_promt"> <span class="text_left", style="float:left">'+p.left+'</span> <span class="text_right", style="float:right">'+p.right+'</span> </div>', 
+            prompt: '<span style="float:left">'+p.left+'</span> <span style="float:right">'+p.right+'</span>', 
+// prompt: '<div class = "likert_promt"> <span class="text_left", style="float:left">'+p.left+'</span> <span class="text_right", style="float:right">'+p.right+'</span> </div>', 
       name: p.name, 
       options: [1,2,3,4,5,6,7], 
-      required: false,
+      required: true,
       horizontal: true,
-      css_classes: ['top_bordered']
+      css_classes: ['top_bordered', 'white_letters']
     });
 });
 
@@ -1152,12 +1157,18 @@ var semantic_differential = {
   type: jsPsychSurveyMultiChoice,
   questions: survey_formatted, 
   randomize_question_order: true,
-  on_load: function(){
-     var box = document.getElementsByClassName("jspsych-survey-multi-choice-question");
+  on_load: function() {
+     /* 
+    this block places all radio buttons in a sub-div 
+    and gives them new class ~options, which makes the letters white.
+    this way we only see the radio buttons as customary for semantic differential scales
+    */
+    
+    var box = document.getElementsByClassName("jspsych-survey-multi-choice-question");
     Array.from(box).forEach(function(e) { 
       
-       var d = document.createElement( 'div');  	
-      d.classList.add("jspsych-survey-multi-choice-options");
+      var newdiv = document.createElement( 'div');  	
+      newdiv.classList.add("jspsych-survey-multi-choice-options");
       
       var notes = [];
     	for (var i = 0; i < e.childNodes.length; i++) {
@@ -1167,17 +1178,17 @@ var semantic_differential = {
         }     
       }
         // console.log(notes.length)
-     	for (var i = 0; i < notes.length; i++) {
-        d.appendChild(notes[i]);
+    	for (var i = 0; i < notes.length; i++) {
+        newdiv.appendChild(notes[i]);
       }
-       console.log(d); 
-       e.appendChild(d);
-    });
-    
-    },
+      e.appendChild(newdiv);
+    }); 
+  },
   data: { 
     task: 'aesthetic_visit', 
-    video: jsPsych.timelineVariable('link') }
+    video: jsPsych.timelineVariable('link') 
+    
+  }
 }
 
 /* SAM */
@@ -1338,7 +1349,7 @@ var trial_in_fullscreen = {
 /* define test procedure */
 
 var trial_block_1 = {
-  timeline: [fixation, trial, buffer,  willingnesstowalk, emotions_scale, presence, being_away, semantic_differential], // , sam_procedure, presence
+  timeline: [browserCheck, fixation, trial, buffer,  willingnesstowalk, emotions_scale, presence, being_away, semantic_differential], // , sam_procedure, presence
   timeline_variables: stimuli_database.slice(0,15), // 15
   randomize_order: true,
   repetitions: 1 // how many times to repeat each stimulus
@@ -1521,21 +1532,25 @@ var end_experiment = {
 };
 
 
-timeline.push(welcome);
+timeline.push(browserCheck, welcome);
 
-// /* eye-tracking calibration*/
+/* eye-tracking calibration*/
 timeline.push(camera_instructions, init_camera, calibration_instructions, calibration);  //calibration_instructions_2
 
-// /* eye-tracking validation*/
+/* eye-tracking validation*/
 timeline.push(validation_instructions, validation, recalibrate, calibration_done);
 
-// /* demo */
-timeline.push(instructions, demo_trial, feedback, post_demo);
+/* demo */
+timeline.push(instructions, browserCheck, demo_trial, feedback, post_demo);
+ 
+/* main block */
+timeline.push(trial_in_fullscreen, enter_fullscreen);  
 
-// /* main block */
-timeline.push(enter_fullscreen, trial_in_fullscreen);  
 timeline.push(trial_block_1);
 timeline.push(little_break_1, feedback, little_break_2);
+
+timeline.push(trial_in_fullscreen, enter_fullscreen);  
+
 timeline.push(trial_block_2);
 timeline.push(post_trial);
 
@@ -1549,10 +1564,13 @@ timeline.push(sps_sf); // social ph/obia
 timeline.push(ipip6); // personality
 
 timeline.push(demographics);
-timeline.push(socialForce_instructions,trial_social_force, end_social_force);
+
+timeline.push(socialForce_instructions, browserCheck, trial_social_force, end_social_force);
+
 timeline.push(end_feedback);
 
+/* return to prolific */
 timeline.push(end_experiment); 
 
-// /* start the experiment */
+/* start the experiment */
 jsPsych.run(timeline);
