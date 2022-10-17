@@ -1,0 +1,497 @@
+---
+title: "NICE Online"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+# Rationale
+#Setup
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+options(digits = 3)
+
+cache <- FALSE
+fig.width <- see::golden_ratio(7)
+fig.height <- 7
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  dpi = 450,
+  fig.path = "./figures/",
+  fig.width = fig.width,
+  fig.height = fig.height
+)
+```
+
+## Libraries used
+Load libraries necessary to run the script.
+```{r}
+library(tidyverse) # general 
+library(ggdist) # plot distributions
+library(ggside) # plot distributions on the plot margins
+library(easystats) # estimate and process statistical models
+library(patchwork) # combine multiple plots
+library(modelsummary) # for tables
+```
+
+
+## Reusable functions
+### Plot distributions
+```{r fig.height=fig.height*2, message=FALSE, warning=FALSE, cache=FALSE}
+plot_distributions <- function(df, col) {
+  p1 <- df[c("Participant", col)] |> 
+    group_by(Participant) |> 
+    mean_qi(na.rm=TRUE) |> 
+    rename("x" = all_of(col)) |> 
+    mutate(Participant = fct_reorder(Participant, x)) |> 
+    ggplot(aes(x = x, y = Participant)) +
+    ggdist::geom_pointinterval(aes(color=Participant, xmin = .lower, xmax = .upper), interval_size_range=c(0.03, 0.03), fatten_point = 1) +
+    scale_x_continuous(expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
+    scale_color_material_d(guide="none") +
+    theme_modern() +
+    theme(axis.text.y = element_blank(), axis.title.x = element_blank()) +
+    labs(y = "Participants") +
+    ggside::geom_xsidedensity(aes(y=stat(density)), fill = "#9C27B0", color=NA) +
+    ggside::geom_xsidedensity(data=df, aes_string(x=col, y="stat(density)"), fill = "black", color=NA, alpha=0.2) +
+    ggside::theme_ggside_void()
+    
+  p2 <- df[c("Video", col)] |> 
+    group_by(Video) |> 
+    mean_qi(na.rm=TRUE) |> 
+    rename("x" = all_of(col)) |> 
+    mutate(Video = fct_reorder(Video, x)) |> 
+    ggplot(aes(x = x, y = Video)) +
+    ggdist::geom_pointinterval(aes(color=Video, xmin = .lower, xmax = .upper), , interval_size_range=c(0.03, 0.03), fatten_point = 1) +
+    scale_x_continuous(expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
+    scale_color_viridis_d(guide="none") +
+    theme_modern() +
+    theme(axis.text.y = element_blank(), axis.title.x = element_blank()) +
+    labs(y = "Videos") +
+    ggside::geom_xsidedensity(aes(y=stat(density)), fill = "#4CAF50", color=NA) +
+    ggside::geom_xsidedensity(data=df, aes_string(x=col, y="stat(density)"), fill = "black", color=NA, alpha=0.2) +
+    ggside::theme_ggside_void()
+  
+  wrap_elements(
+    p1 + p2 +
+    plot_annotation(title = col,
+                    theme = theme(plot.title = element_text(hjust = 0.5, face = "bold")))
+  )
+}
+```
+
+# Analysis
+## Load data
+
+```{r message=FALSE, warning=FALSE}
+
+df <- read.csv('data/data_pruned_for_analysis_2022-09-14.csv') |> 
+  mutate(Typology = fct_relevel(primary_category, "urban", "green"))
+
+nrow(df)
+```
+
+## Participant
+Here we only provide an overview to confirm we have loaded the correct amount of participants -- as a sanity check. Participant characteristics are analysed and reported by a different file (Table 1).
+
+```{r }
+dfsub <- df |> 
+  group_by(Participant) |> 
+  select(Participant, Age, Sex, Language, Crowd_Preference_Mean, starts_with("ipip"), SSA_Mean, SPS_Total_Mean, SIAS_Total_Mean, NSS, Upbringing_Environment, Current_Environment.y) |> 
+  slice(1)
+```
+
+A total of `r report::report_participants(dfsub, age="Age")` participants were included for analysis.
+
+```{r }
+dfsub |> 
+  ggplot(aes(x = Age)) +
+  geom_density(fill = "orange") + 
+  geom_vline(xintercept = mean(dfsub$Age), color = "red", linetype="dashed") +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_modern()
+```
+
+
+## Video Ratings {.tabset}
+
+### Variable Distribution
+
+```{r fig.height=fig.width*1.5, message=FALSE, warning=FALSE, cache=FALSE}
+p <- (plot_distributions(df, "Crowdedness") |
+  plot_distributions(df, "Beauty")) /
+  (plot_distributions(df, "Restoration") |
+  plot_distributions(df, "Presence")) /
+  (plot_distributions(df, "Attractiveness") |
+  plot_distributions(df, "Structure")) /
+  (plot_distributions(df, "Scenery") |
+  plot_distributions(df, "Interest")) /
+  (plot_distributions(df, "Width") |
+  plot_distributions(df, "Familiarity")) /
+  (plot_distributions(df, "Positivity") |
+  plot_distributions(df, "Excitement"))
+# p
+# ggsave("figures/interindividualstimuli_variability.png", p, height=fig.width*1.5, width=fig.width, limitsize = FALSE, dpi=300)
+```
+
+## Determinants of Perceived Crowdedness
+In this section 
+
+```{r}
+rm(preds, dat, mods, vars)
+preds <- data.frame()
+params <- data.frame()
+mods <- list()
+outcome_var = "Crowdedness"
+vars <-  c("Beauty", "Scenery", "Width", "Structure" ) # replaced familiarity with Beauty
+
+for(i in 1:length(vars)) { 
+  
+  var = vars[i]
+  print(var)
+  
+  f <- paste0(outcome_var," ~ log1p(mean_pedcounts)* ", var, " + (", var, "|Participant)")
+  
+  model <- glmmTMB::glmmTMB(as.formula(f), data=df)
+  mods[[i]] <- model
+  # Individual-level correlations
+  dfsub <- modelbased::estimate_grouplevel(model) |> 
+    modelbased::reshape_grouplevel() |> 
+    select(c(1, 3)) |> 
+    group_by(Participant) |> 
+    slice(1) |> 
+    data_rename(pattern = paste0("Participant_Coefficient_", var), paste0(outcome_var, "_", var), regex=TRUE) |> 
+    merge(dfsub, by="Participant")
+  
+  # Parameters
+  param <- parameters::parameters(model, effects = "fixed")
+  param$Variable <- var
+  params <- rbind(params,param)
+  
+  perf <- performance(model)
+  perf$Variable <- var
+  perfs <- rbind(perfs,perf)
+  
+  # Predicted
+  pred <- estimate_relation(model, at=c("mean_pedcounts", var), length=c(30, 3))
+  names(pred)[names(pred) == var] <- "Value"
+  pred$Variable <- var
+  pred$Label <- paste0("Main effect: ", format_p(param$p[3]), "\nInteraction: ", format_p(param$p[4]))
+  
+  preds <- rbind(preds, pred)
+}
+```
+
+
+```{r}
+
+
+p_crowd <- preds |> 
+  ggplot(aes(x = mean_pedcounts, y = Predicted)) +
+  stat_density_2d(data=df, aes(y=Crowdedness, fill = ..density..), geom = "raster", contour = FALSE) +
+  geom_line(aes(color = Value, group=Value)) +
+  geom_text(data=slice(group_by(preds, Variable), 1), 
+            aes(x = 0, y = 7, label = Label), hjust=0, vjust=1) +
+  scale_fill_gradientn(colours=c("white", "#4CAF50"), guide="none") +
+  # scale_color_gradientn(colours=c("#2196F3", "#9C27B0", "red")) +
+  scale_colour_viridis_b(option = "A") +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0), breaks = c(0, 1,3,5,7)) +
+  labs(x  = "Pedestrian counts (log)", y = "Perceived Crowdedness (1-7)") +
+  theme_modern() +
+  theme(strip.placement = "outside", strip.text.x = element_text(hjust = 0)) +
+  ggside::geom_xsidedensity(data=df, aes(y=stat(density)), fill = "grey") +
+  ggside::theme_ggside_void() +
+  facet_wrap(~Variable, strip.position = "top", ncol=2) 
+
+p_crowd
+
+ggsave(p_crowd, filename = "output/plots_perc_crowd.jpg", scale = 1.5, width = 12, height = 12, units = "cm", dpi = 300)
+
+  
+```
+
+
+```{r}
+
+names(mods) <- vars
+modelsummary(mods, stars = TRUE,  statistic = "[{conf.low} - {conf.high}]",
+            coef_omit = "SD|Cor", 
+            coef_rename = c("log1p(mean_pedcounts)"="PC (log)", 
+                            "log1p(mean_pedcounts)Beauty"="PC (log) x Beauty", 
+                            "log1p(mean_pedcounts)Scenery"="PC (log) x Scenery",
+                            "log1p(mean_pedcounts)Width"="PC (log) x Width",
+                            "log1p(mean_pedcounts)Structure"="PC (log) x Structure"),
+            title = "Non-linear mixed effects models of Perceived Crowdedness",
+            notes = "PC (log) : Average pedestrian count per stimulus" ,
+            output = "output/table_models_perceived_crowds.tex")
+
+```
+
+## Determinants of Beauty
+
+```{r}
+rm(preds, dat, mods, vars)
+preds <- data.frame()
+dat <- data.frame()
+mods <- list()
+vars <-  c( "Structure" , "Scenery", "Familiarity","Width")
+
+for(i in 1:length(vars)) {
+  var = vars[i]
+  print(var)
+  
+  f <- paste0("Beauty ~ Typology + poly(mean_pedcounts, 2) * ", var, " + (", var, "|Participant)")
+
+  model <- glmmTMB::glmmTMB(as.formula(f), data=df)
+  mods[[i]] <- model
+  # Individual-level correlations
+  dfsub <- modelbased::estimate_grouplevel(model) |> 
+    modelbased::reshape_grouplevel() |> 
+    select(c(1, 3)) |> 
+    group_by(Participant) |> 
+    slice(1) |> 
+    data_rename(pattern = paste0("Participant_Coefficient_", var), paste0("Beauty_", var), regex=TRUE) |> 
+    merge(dfsub, by="Participant")
+  
+  # Parameters
+  param <- parameters::parameters(model, effects = "fixed")
+
+  # Predicted
+  pred <- estimate_relation(model, at=c("mean_pedcounts", var), length=c(3, 30))
+  names(pred)[names(pred) == var] <- "Value"
+  pred$Variable <- var
+  pred$Label <- paste0("Objective Crowding: ", format_p(param$p[2]), 
+                       "\n", var, ": ", format_p(param$p[3]), 
+                       "\nInteraction: ", format_p(param$p[4]))
+  
+  # Data for density
+  dat <- rbind(dat, data.frame(Value = df[[var]], Predicted = df$Beauty, Variable = var))
+  preds <- rbind(preds, pred)
+}
+```
+
+
+```{r}
+p_beauty <- preds |> 
+  ggplot(aes(x = Value, y = Predicted)) +
+  stat_density_2d(data=dat, aes(fill = ..density..), geom = "raster", contour = FALSE) +
+  geom_line(aes(color = mean_pedcounts, group=mean_pedcounts)) +
+  geom_text(data=slice(group_by(preds, Variable), 1), 
+            aes(x = 0, y = 7, label = Label), hjust=0, vjust=1) +
+  scale_fill_gradientn(colours=c("white", "#2196F3"), guide="none") +
+  scale_color_gradientn(colours=c("orange", "red", "purple")) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(colour  = "Average \npedestrian \ncounts", y = "Beauty") +
+  theme_modern() +
+  theme(strip.placement = "outside") +
+  # ggside::geom_xsidedensity(data=df, aes(y=stat(density)), fill = "grey") +
+  # ggside::theme_ggside_void() +
+  facet_wrap(~Variable, strip.position = "bottom", ncol=2, scales="free_x") 
+
+p_beauty
+
+ggsave(p_beauty, filename = "output/plots_perc_beauty.jpg", scale = 1.5, width = 12, height = 12, units = "cm", dpi = 300)
+```
+
+Table output
+```{r}
+names(mods) <- vars
+modelsummary(mods,stars = TRUE)
+modelsummary(mods, stars = TRUE,  statistic = "[{conf.low} - {conf.high}]",
+            coef_omit = "SD|Cor", 
+            # coef_rename = c("log1p(mean_pedcounts)"="PC (log)", 
+            #                 "log1p(mean_pedcounts)Structure"="PC (log) x Structure", 
+            #                 "log1p(mean_pedcounts)Scenery"="PC (log) x Scenery",
+            #                 "log1p(mean_pedcounts)Familiarity"="PC (log) x Familiarity",
+            #                 "log1p(mean_pedcounts)Width"="PC (log) x Width"),
+            title = "Non-linear mixed effects models of Perceived Beauty",
+            # notes = "PC (log) : Average pedestrian count per stimulus" ,
+            output = "output/table_models_perceived_beauty.tex")
+```
+
+## Determinants of Psychological Reaction {.tabset}
+
+```{r, warning=FALSE, message=FALSE}
+rm(preds, dat, mods, vars)
+preds <- data.frame()
+dat <- data.frame()
+
+df <- df %>% filter(!is.na(Crowdedness))
+
+mods <- list()
+vars <-  c("Attractiveness", "Positivity", "Excitement", "Restoration", "Interest", "Presence" )
+
+for(i in 1:length(vars)) {
+  resp = vars[i]
+  print(resp)
+
+  f <- paste(resp, " ~ Typology / (poly(mean_pedcounts, 2) * Beauty) + (1|Participant) + (1|Video)")
+  
+  model <- glmmTMB::glmmTMB(as.formula(f), data=df)
+  mods[[i]] <- model
+  param <- parameters::parameters(model, effects="fixed")
+  
+  # Predictions
+  preds <- estimate_relation(model, length=c(20, 3)) |> 
+    mutate(Outcome = resp,
+           Label_urban = paste0("Urban",
+                                "\nCrowdedness: ", format_p(param$p[3]),
+                                "\nBeauty: ", format_p(param$p[5]),
+                                "\nInteraction: ", format_p(param$p[7])),
+           Label_green = paste0("Green: ", format_p(param$p[2]),
+                                "\nCrowdedness: ", format_p(param$p[4]),
+                                "\nBeauty: ", format_p(param$p[6]),
+                                "\nInteraction: ", format_p(param$p[8]))) |> 
+    rbind(preds) 
+  
+  # Data for density
+  dat <- rbind(dat, data.frame(mean_pedcounts = df$mean_pedcounts, Predicted = df[[resp]], Outcome= resp))
+  
+  # Random (simplified model)
+  f <- paste(resp, " ~ mean_pedcounts + Beauty + (mean_pedcounts + Beauty |Participant)")
+  model <- glmmTMB::glmmTMB(as.formula(f), data=df)
+  dfsub <- modelbased::estimate_grouplevel(model) |>
+    modelbased::reshape_grouplevel(indices = "Coefficient") |>
+    select(c(1, 3, 4)) |>
+    group_by(Participant) |>
+    slice(1) |>
+    data_addprefix(paste0(resp, "_"), exclude ="Participant") |>
+    merge(dfsub, by="Participant")
+  
+}
+
+# re-order results for better ploting
+preds <- preds %>% mutate(Outcome = factor(Outcome, levels = c("Attractiveness", "Positivity", "Excitement", "Restoration", "Interest", "Presence" ) ) )
+
+names(mods) <- vars
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+p_psych <- ggplot(preds, aes(x = mean_pedcounts, y = Predicted)) +
+  stat_density_2d(data=dat, aes(fill = ..density..), geom = "raster", contour = FALSE) +
+  geom_line(aes(color = Beauty, linetype = Typology, group=interaction(Beauty, Typology))) +
+  geom_text(data=slice(group_by(preds, Outcome), 1), 
+            aes(x = 0, y = 8.8, label = Label_urban), hjust=0, vjust=1, size=3) + 
+  geom_text(data=slice(group_by(preds, Outcome), 1), 
+            aes(x = 4, y = 8.8, label = Label_green), hjust=0, vjust=1, size=3) + 
+  scale_fill_gradientn(colours=c("white", "#FFC107"), guide="none") +
+  # scale_color_gradientn(colours=c("#795548", "#9C27B0")) +
+  scale_colour_viridis_b() +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0),  breaks = c(1,3,5,7)) +
+  theme_modern() +
+  theme(strip.placement = "outside", strip.text.x = element_text(hjust = 0)) +
+  labs(x = "Average pedestrian count", y = "Score") +
+  ggside::geom_xsidedensity(data=dat, aes(y=stat(density)), fill = "grey") +
+  # ggside::geom_ysidedensity(data=dat, aes(x=stat(density)), fill = "grey") +
+  # ggside::theme_ggside_void() +
+  facet_wrap(~ Outcome, strip.position = "top") 
+
+p_psych
+
+ggsave(p_psych, filename = "output/plots_psych_reaction.jpg", scale = 1.5, width = 12, height = 12, units = "cm", dpi = 300)
+
+```
+
+Table output
+```{r}
+modelsummary(mods,stars = TRUE)
+modelsummary(mods, stars = TRUE,  statistic = "[{conf.low} - {conf.high}]",
+            coef_omit = "SD|Cor", 
+            # coef_rename = c("log1p(mean_pedcounts)"="PC (log)", 
+            #                 "log1p(mean_pedcounts)Structure"="PC (log) x Structure", 
+            #                 "log1p(mean_pedcounts)Scenery"="PC (log) x Scenery",
+            #                 "log1p(mean_pedcounts)Familiarity"="PC (log) x Familiarity",
+            #                 "log1p(mean_pedcounts)Width"="PC (log) x Width"),
+            title = "Non-linear mixed effects models of psychological reaction",
+            # notes = "PC (log) : Average pedestrian count per stimulus" ,
+            output = "output/table_models_psych_reaction.tex")
+```
+
+## Inter-individual Correlations
+
+### Correlates of Individual-level effects
+
+```{r}
+# smaller random slopes = less impact of variable on perceived crowdedness (less environmental bias)
+correlation(select(dfsub, contains("Crowdedness_")),
+            select(dfsub, starts_with("ipip"), starts_with("Crowd_")),
+            bayesian = TRUE) |> 
+  arrange(desc(BF)) |> 
+  filter(BF > 3)
+```
+
+```{r}
+correlation(select(dfsub, contains("Beauty_")),
+            select(dfsub, starts_with("ipip"), starts_with("Crowd_")),
+            bayesian = TRUE) |> 
+  arrange(desc(BF)) |> 
+  filter(BF > 3)
+```
+
+```{r}
+correlation(select(dfsub, contains("_Beauty"), contains("_Crowdedness")),
+            select(dfsub, starts_with("ipip"), starts_with("Crowd_")),
+            bayesian = TRUE) |> 
+  arrange(desc(BF)) |> 
+  filter(BF > 3)
+```
+
+### Determinants of Crowd preference
+
+```{r}
+
+correlation(select(dfsub, Crowd_Preference_Mean),
+            select(dfsub, starts_with("ipip_"), SSA_Mean, NSS,SIAS_Total_Mean, SPS_Total_Mean, Age),
+            bayesian = TRUE) |> 
+  arrange(desc(BF))  #|>
+  filter(BF > 3)
+  
+```
+
+
+```{r}
+t1 <- BayesFactor::ttestBF(formula =  Crowd_Preference_Mean ~ Sex, data=dfsub %>% filter(!is.na(Crowd_Preference_Mean)))
+t2 <- BayesFactor::ttestBF(formula =  Crowd_Preference_Mean ~ Upbringing_Environment, data=dfsub %>% filter(!is.na(Crowd_Preference_Mean)))
+t3 <- BayesFactor::ttestBF(formula =  Crowd_Preference_Mean ~ Current_Environment.y, data=dfsub %>% filter(!is.na(Crowd_Preference_Mean)))
+
+library(bayestestR)
+describe_posterior(t1) %>% 
+  bind_rows(describe_posterior(t2)) %>% 
+  bind_rows(describe_posterior(t3)) %>% 
+  mutate(Parameter = c("Crowd_Preference ~ Sex","Crowd_Preference ~ Upbringing", "Crowd preference ~ Current"  ))  
+  tables::tabular() #toLatex()
+
+  
+```
+
+```{r}
+library(lmerTest)
+summary(lm(Crowd_Preference_Mean ~ ipip_Extroversion +
+             ipip_Agreeableness + ipip_Conscientiousness +
+             ipip_Neuroticism + ipip_Openness + ipip_Honesty +
+             SSA_Mean + NSS + SIAS_Total_Mean + SPS_Total_Mean + Age + Sex +Current_Environment.y + Upbringing_Environment, dfsub))
+```
+
+
+
+## Session information
+```{r}
+sessionInfo()
+```
+

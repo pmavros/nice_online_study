@@ -1,0 +1,71 @@
+---
+title: "Demographics Report"
+output: html_document
+date: '2022-09-12'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Participant characteristics
+
+This table shows participants' demographic characteristics. It will be transferred to Latex and to the manuscript at a later stage.
+
+Note: "From prolific.co https://researcher-help.prolific.co/hc/en-gb/articles/360019238413-Representative-samples-FAQ:
+
+Starting with the youngest allowable participation age on Prolific, we stratify age using five 9-year brackets: 18-27, 28-37, 38-47, 48-57, and 58+. ‘Sex’ is stratified into male and female. ‘Ethnicity (simplified)’ is stratified into the five categories recommended by the UK Office of National Statistics: White, Mixed, Asian, Black and Other."
+
+```{r eval=FALSE, include=FALSE}
+library(furniture)
+library(tidyverse)
+
+demographics <- read_csv("data/demographics_merged.csv") %>% 
+  filter(!is.na(Participant))
+
+length(unique(demographics$Participant))
+# Working/school Other (Other (e.g., unemployed, retired))
+# Age (years) 18–29 30-49 50-64 65+
+# Location of residence 	Town, village, or hamlet 	/ City
+
+
+df <- read.csv('data/data_pruned_for_analysis_2022-09-14.csv')
+
+demographics <- demographics %>% 
+  filter(Participant %in% unique(df$Participant))
+
+demographics <- demographics %>% 
+  mutate(
+    Employment = if_else(Employment_status %in% c("Full-time", "Part-time") | Student_status == "Yes", "Working/Studying", "Other (e.g., unemployed, retired)"),
+    Age_breaks = cut(Age, breaks = c(17.9, 30, 50, 65, 100), labels = c("18–29", "30-49", "50-64", "65+") ),
+    Education = if_else(ArchBg == "Yes", "Architecture", if_else(ArtsBg == "Yes", "Arts", "Other")),
+    Upbringing_Environment = if_else(tolower(urban_rural_background) == "urban", "Urban", "Other"),
+    Current_Environment = if_else(tolower(urban_rural_now) == "urban", "Urban", "Other"),
+    Upbringing_Environment = factor(Upbringing_Environment, levels = c("Urban", "Other")),
+    Current_Environment = factor(Current_Environment, levels = c("Urban", "Other")),
+  )
+
+
+demographics
+table_1 <- demographics  %>% 
+  furniture::table1(., splitby = ~ Sex,total = TRUE,
+         # Sex,
+         Age = Age_breaks,
+         Education,
+         Ethnicity, 
+         "Employment" = Employment, 
+         "Upbringing Environment" = `Upbringing_Environment`,
+         "Current Environment"= `Current_Environment`,
+         "Approval rate" = Approval_rate,
+         output = "latex2",
+         booktabs = TRUE, caption = "Participant characteristics", label = "tab:participant_characteristics"
+        ) 
+table_1
+
+write(x = table_1, file = "figures/table_1.tex") 
+write(x = table_1, file = "../../../../../../Apps/Overleaf/NICE Online Study/tables/table_1.tex") 
+
+# repeat this without the latex code to print in this document
+
+
+```
