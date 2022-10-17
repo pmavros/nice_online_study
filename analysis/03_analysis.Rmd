@@ -13,8 +13,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Rationale
-#Setup
+# Setup
 
 ```{r, echo = FALSE, warning=FALSE, message=FALSE}
 options(digits = 3)
@@ -94,8 +93,8 @@ plot_distributions <- function(df, col) {
 ## Load data
 
 ```{r message=FALSE, warning=FALSE}
-
-df <- read.csv('data/data_pruned_for_analysis_2022-09-14.csv') |> 
+path <- 
+df <- read.csv('C:/Dropbox/RECHERCHE/Projects/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv') |> 
   mutate(Typology = fct_relevel(primary_category, "urban", "green"))
 
 nrow(df)
@@ -114,13 +113,19 @@ dfsub <- df |>
 A total of `r report::report_participants(dfsub, age="Age")` participants were included for analysis.
 
 ```{r }
-dfsub |> 
+(dfsub |> 
   ggplot(aes(x = Age)) +
   geom_density(fill = "orange") + 
   geom_vline(xintercept = mean(dfsub$Age), color = "red", linetype="dashed") +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
-  theme_modern()
+  theme_modern()) | 
+(dfsub |> 
+  ggplot(aes(x = Sex, fill = Sex)) +
+  geom_bar(stat = "count") +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_fill_see_d(guide = "none") +
+  theme_modern())
 ```
 
 
@@ -146,11 +151,12 @@ p <- (plot_distributions(df, "Crowdedness") |
 ```
 
 ## Determinants of Perceived Crowdedness
-In this section 
+
 
 ```{r}
 rm(preds, dat, mods, vars)
 preds <- data.frame()
+perfs <- data.frame()
 params <- data.frame()
 mods <- list()
 outcome_var = "Crowdedness"
@@ -161,7 +167,7 @@ for(i in 1:length(vars)) {
   var = vars[i]
   print(var)
   
-  f <- paste0(outcome_var," ~ log1p(mean_pedcounts)* ", var, " + (", var, "|Participant)")
+  f <- paste0(outcome_var," ~ log1p(mean_pedcounts) * ", var, " * Typology + Familiarity + (", var, "|Participant)")
   
   model <- glmmTMB::glmmTMB(as.formula(f), data=df)
   mods[[i]] <- model
@@ -184,7 +190,7 @@ for(i in 1:length(vars)) {
   perfs <- rbind(perfs,perf)
   
   # Predicted
-  pred <- estimate_relation(model, at=c("mean_pedcounts", var), length=c(30, 3))
+  pred <- estimate_relation(model, at=c("mean_pedcounts", var, "Typology"), length=c(50, 7))
   names(pred)[names(pred) == var] <- "Value"
   pred$Variable <- var
   pred$Label <- paste0("Main effect: ", format_p(param$p[3]), "\nInteraction: ", format_p(param$p[4]))
@@ -195,36 +201,39 @@ for(i in 1:length(vars)) {
 
 
 ```{r}
-
-
 p_crowd <- preds |> 
+  filter(Predicted < 7) |>
+  mutate(Value = as.factor(Value)) |> 
   ggplot(aes(x = mean_pedcounts, y = Predicted)) +
   stat_density_2d(data=df, aes(y=Crowdedness, fill = ..density..), geom = "raster", contour = FALSE) +
-  geom_line(aes(color = Value, group=Value)) +
-  geom_text(data=slice(group_by(preds, Variable), 1), 
-            aes(x = 0, y = 7, label = Label), hjust=0, vjust=1) +
-  scale_fill_gradientn(colours=c("white", "#4CAF50"), guide="none") +
-  # scale_color_gradientn(colours=c("#2196F3", "#9C27B0", "red")) +
-  scale_colour_viridis_b(option = "A") +
+  geom_line(aes(color = Typology, alpha=Value, group = interaction(Typology, Value)), size=1) +
+  scale_fill_gradientn(colours=c("white", "grey"), guide="none") +
+  scale_color_manual(values = c("urban" = "brown", "green" = "#4CAF50")) +
+  # scale_colour_viridis_b(option = "A") +
+  # scale_x_log10(expand = c(0, 0), breaks = seq(2, 20, by = 2)) +
   scale_x_continuous(expand = c(0, 0)) +
-  scale_y_continuous(expand = c(0, 0), breaks = c(0, 1,3,5,7)) +
-  labs(x  = "Pedestrian counts (log)", y = "Perceived Crowdedness (1-7)") +
+  scale_y_continuous(expand = c(0, 0), breaks = c(0, 1,3,5, 7)) +
+  labs(x  = "Pedestrian counts", y = "Perceived Crowdedness (1-7)") +
+  # coord_cartesian(ylim = c(1, 7)) +
   theme_modern() +
-  theme(strip.placement = "outside", strip.text.x = element_text(hjust = 0)) +
-  ggside::geom_xsidedensity(data=df, aes(y=stat(density)), fill = "grey") +
+  theme(strip.placement = "outside", 
+        strip.text.x = element_text(hjust = 0, size = 12)) +
+  ggnewscale::new_scale_fill() +
+  scale_fill_manual(values = c("urban" = "brown", "green" = "#4CAF50")) +
+  ggside::geom_xsidedensity(data=df, aes(y=after_stat(scaled), fill = Typology), color = NA, alpha = 0.5) +
+  ggside::geom_ysidedensity(data=df |> 
+                              select(all_of(c("Typology", vars))) |> 
+                              pivot_longer(-Typology, values_to="Predicted", names_to="Variable"), aes(x=after_stat(scaled), fill = Typology), color = NA, alpha = 0.5) +
   ggside::theme_ggside_void() +
   facet_wrap(~Variable, strip.position = "top", ncol=2) 
 
 p_crowd
 
-ggsave(p_crowd, filename = "output/plots_perc_crowd.jpg", scale = 1.5, width = 12, height = 12, units = "cm", dpi = 300)
-
-  
+ggsave(p_crowd, filename = "output/plots_perc_crowd.jpg", width = 10, height = 7, dpi = 300)
 ```
 
 
 ```{r}
-
 names(mods) <- vars
 modelsummary(mods, stars = TRUE,  statistic = "[{conf.low} - {conf.high}]",
             coef_omit = "SD|Cor", 
