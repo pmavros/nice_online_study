@@ -1,0 +1,46 @@
+\begin{table}
+
+\caption{Non-linear mixed effects models of psychological reaction}
+\centering
+\begin{tabular}[t]{lc}
+\toprule
+  & Model 1\\
+\midrule
+(Intercept) & \num{0.099}+\\
+ & {}[\num{-0.006} - \num{0.204}]\\
+Typologygreen & \num{0.064}\\
+ & {}[\num{-0.241} - \num{0.368}]\\
+Familiarity & \num{0.051}***\\
+ & {}[\num{0.038} - \num{0.065}]\\
+Typologyurbanpoly(Crowdedness, 2)1 & \num{-5.739}+\\
+ & {}[\num{-12.534} - \num{1.056}]\\
+Typologygreenpoly(Crowdedness, 2)1 & \num{-17.479}\\
+ & {}[\num{-43.691} - \num{8.733}]\\
+Typologyurbanpoly(Crowdedness, 2)2 & \num{-26.579}***\\
+ & {}[\num{-33.186} - \num{-19.972}]\\
+Typologygreenpoly(Crowdedness, 2)2 & \num{-27.073}*\\
+ & {}[\num{-51.084} - \num{-3.062}]\\
+TypologyurbanBeauty & \num{0.754}***\\
+ & {}[\num{0.738} - \num{0.771}]\\
+TypologygreenBeauty & \num{0.737}***\\
+ & {}[\num{0.687} - \num{0.787}]\\
+Typologyurbanpoly(Crowdedness, 2)1Beauty & \num{0.617}\\
+ & {}[\num{-0.820} - \num{2.054}]\\
+Typologygreenpoly(Crowdedness, 2)1Beauty & \num{0.408}\\
+ & {}[\num{-4.060} - \num{4.875}]\\
+Typologyurbanpoly(Crowdedness, 2)2Beauty & \num{3.254}***\\
+ & {}[\num{1.834} - \num{4.675}]\\
+Typologygreenpoly(Crowdedness, 2)2Beauty & \num{2.402}\\
+ & {}[\num{-1.681} - \num{6.485}]\\
+\midrule
+Num.Obs. & \num{10960}\\
+R2 Marg. & \num{0.533}\\
+R2 Cond. & \num{0.641}\\
+AIC & \num{32539.8}\\
+BIC & \num{32656.6}\\
+ICC & \num{0.2}\\
+RMSE & \num{0.99}\\
+\bottomrule
+\multicolumn{2}{l}{\rule{0pt}{1em}+ p $<$ 0.1, * p $<$ 0.05, ** p $<$ 0.01, *** p $<$ 0.001}\\
+\end{tabular}
+\end{table}
