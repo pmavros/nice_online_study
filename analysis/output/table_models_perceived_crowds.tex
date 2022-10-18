@@ -1,0 +1,63 @@
+\begin{table}
+
+\caption{Non-linear mixed effects models of Perceived Crowdedness}
+\centering
+\begin{tabular}[t]{lcccc}
+\toprule
+  & Beauty & Scenery & Width & Structure\\
+\midrule
+(Intercept) & \num{1.641}*** & \num{1.539}*** & \num{1.909}*** & \num{3.842}***\\
+ & {}[\num{1.458} - \num{1.825}] & {}[\num{1.365} - \num{1.713}] & {}[\num{1.736} - \num{2.082}] & {}[\num{3.638} - \num{4.046}]\\
+PC (log) & \num{1.835}*** & \num{1.870}*** & \num{1.793}*** & \num{1.122}***\\
+ & {}[\num{1.743} - \num{1.928}] & {}[\num{1.784} - \num{1.955}] & {}[\num{1.711} - \num{1.875}] & {}[\num{1.032} - \num{1.213}]\\
+Beauty & \num{-0.034}+ &  &  & \\
+ & {}[\num{-0.072} - \num{0.005}] &  &  & \\
+Typologygreen & \num{-0.032} & \num{0.171} & \num{-0.526}*** & \num{-1.554}***\\
+ & {}[\num{-0.508} - \num{0.444}] & {}[\num{-0.273} - \num{0.616}] & {}[\num{-0.833} - \num{-0.219}] & {}[\num{-1.969} - \num{-1.139}]\\
+Familiarity & \num{0.029}*** & \num{0.027}*** & \num{0.040}*** & \num{0.057}***\\
+ & {}[\num{0.015} - \num{0.044}] & {}[\num{0.012} - \num{0.041}] & {}[\num{0.026} - \num{0.054}] & {}[\num{0.044} - \num{0.070}]\\
+PC (log) x Beauty & \num{-0.026}* &  &  & \\
+ & {}[\num{-0.046} - \num{-0.006}] &  &  & \\
+log1p(mean\_pedcounts)Typologygreen & \num{0.623}** & \num{0.451}* & \num{1.052}*** & \num{1.351}***\\
+ & {}[\num{0.161} - \num{1.085}] & {}[\num{0.031} - \num{0.872}] & {}[\num{0.772} - \num{1.332}] & {}[\num{1.007} - \num{1.694}]\\
+BeautyTypologygreen & \num{-0.049} &  &  & \\
+ & {}[\num{-0.130} - \num{0.033}] &  &  & \\
+log1p(mean\_pedcounts)BeautyTypologygreen & \num{-0.011} &  &  & \\
+ & {}[\num{-0.090} - \num{0.067}] &  &  & \\
+Scenery &  & \num{-0.007} &  & \\
+ &  & {}[\num{-0.044} - \num{0.031}] &  & \\
+PC (log) x Scenery &  & \num{-0.037}*** &  & \\
+ &  & {}[\num{-0.056} - \num{-0.018}] &  & \\
+SceneryTypologygreen &  & \num{-0.090}* &  & \\
+ &  & {}[\num{-0.167} - \num{-0.013}] &  & \\
+log1p(mean\_pedcounts)SceneryTypologygreen &  & \num{0.022} &  & \\
+ &  & {}[\num{-0.051} - \num{0.095}] &  & \\
+Width &  &  & \num{-0.092}*** & \\
+ &  &  & {}[\num{-0.128} - \num{-0.057}] & \\
+PC (log) x Width &  &  & \num{-0.030}** & \\
+ &  &  & {}[\num{-0.048} - \num{-0.012}] & \\
+WidthTypologygreen &  &  & \num{0.036} & \\
+ &  &  & {}[\num{-0.022} - \num{0.095}] & \\
+log1p(mean\_pedcounts)WidthTypologygreen &  &  & \num{-0.095}*** & \\
+ &  &  & {}[\num{-0.149} - \num{-0.041}] & \\
+Structure &  &  &  & \num{-0.433}***\\
+ &  &  &  & {}[\num{-0.473} - \num{-0.393}]\\
+PC (log) x Structure &  &  &  & \num{0.060}***\\
+ &  &  &  & {}[\num{0.041} - \num{0.078}]\\
+StructureTypologygreen &  &  &  & \num{0.218}***\\
+ &  &  &  & {}[\num{0.145} - \num{0.291}]\\
+log1p(mean\_pedcounts)StructureTypologygreen &  &  &  & \num{-0.132}***\\
+ &  &  &  & {}[\num{-0.195} - \num{-0.069}]\\
+\midrule
+Num.Obs. & \num{11168} & \num{11165} & \num{11166} & \num{11163}\\
+R2 Marg. & \num{0.561} & \num{0.560} & \num{0.571} & \num{0.616}\\
+R2 Cond. & \num{0.628} & \num{0.629} & \num{0.644} & \num{0.686}\\
+AIC & \num{35462.2} & \num{35421.9} & \num{35021.9} & \num{33612.6}\\
+BIC & \num{35557.4} & \num{35517.1} & \num{35117.1} & \num{33707.8}\\
+ICC & \num{0.2} & \num{0.2} & \num{0.2} & \num{0.2}\\
+RMSE & \num{1.11} & \num{1.11} & \num{1.08} & \num{1.02}\\
+\bottomrule
+\multicolumn{5}{l}{\rule{0pt}{1em}PC (log) : Average pedestrian count per stimulus}\\
+\multicolumn{5}{l}{\rule{0pt}{1em}+ p $<$ 0.1, * p $<$ 0.05, ** p $<$ 0.01, *** p $<$ 0.001}\\
+\end{tabular}
+\end{table}
