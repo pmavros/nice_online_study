@@ -273,7 +273,7 @@ rm(preds, mods, vars)
 preds <- data.frame()
 dat <- data.frame()
 mods <- list()
-vars <- c("Crowdedness", "Structure", "Scenery", "Width")
+vars <- c("Crowdedness", "Structure", "Scenery", "Width") #  "Interest",
 
 for (i in 1:length(vars)) {
   var <- vars[i]
@@ -412,21 +412,26 @@ for (i in 1:length(vars)) {
 
 
 
-names(mods) <- vars
+names(mods) <- c("Willingness to Walk", "Positivity", "Excitement", "Restoration",  "Presence")
 ```
 
 
 ```{r, warning=FALSE, message=FALSE}
+
+dat$Outcome <- recode(dat$Outcome, "Attractiveness"="Willingness-to-walk")
+
 p_psych <- preds |>
   dplyr::filter(Predicted <= 7) |>
   mutate(Beauty = fct_rev(as.factor(Beauty)),
-         Outcome = fct_relevel(Outcome, c("Attractiveness", "Positivity", "Excitement", "Restoration", "Interest", "Presence"))) |>
+         Outcome = recode_factor(Outcome, "Attractiveness"="Willingness-to-walk"),
+         Outcome = fct_relevel(Outcome, c("Willingness-to-walk", "Positivity", "Excitement", "Restoration", "Interest", "Presence"))) |>
   ggplot(aes(x = Crowdedness, y = Predicted)) +
   stat_density_2d(data = dat, aes(fill = ..density..), geom = "raster", contour = FALSE) +
-  geom_line(aes(alpha = Beauty, color = Typology, group = interaction(Beauty, Typology)), size = 1) +
+  geom_line(aes(size = Beauty, color = Typology, group = interaction(Beauty, Typology))) +
+  scale_size_manual(values = seq(from = .05, to = 2, length.out= 7), breaks= c(1:7)) +
   scale_fill_gradientn(colours = c("white", "grey"), guide = "none") +
   scale_color_manual(values = c("urban" = col_urban, "green" = col_green)) +
-  scale_alpha_ordinal(range = c(1, 0.1)) +
+  # scale_alpha_ordinal(range = c(1, 0.1)) +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0), breaks = c(1, 3, 5, 7)) +
   theme_modern(axis.title.space = 10) +
@@ -439,12 +444,13 @@ p_psych <- preds |>
   labs(x = "Perceived Crowdedness", y = "Psychological Outcome", title = "Effect of Crowdedness and its modulation by Beauty") +
   ggnewscale::new_scale_fill() +
   scale_fill_manual(values = c("urban" = col_urban, "green" = col_green)) +
-  ggside::geom_xsidedensity(data=dat, aes(y=stat(density), fill = Typology), color = NA, alpha = 0.5) +
-  ggside::geom_ysidedensity(data=dat, aes(x=stat(density), fill = Typology), color = NA, alpha = 0.5) +
+  ggside::geom_xsidedensity(data=dat, aes(y=stat(density), fill = Typology), color = NA, alpha = 0.5, adjust = 2) +
+  ggside::geom_ysidedensity(data=dat, aes(x=stat(density), fill = Typology), color = NA, alpha = 0.5, adjust = 2) +
   ggside::theme_ggside_void() +
-  facet_wrap(~Outcome, strip.position = "top")
+  facet_wrap(~Outcome, strip.position = "left")
 
 p_psych
+
 ```
 
 ```{r}
@@ -460,16 +466,24 @@ Table output
 ```{r}
 modelsummary(mods, stars = TRUE)
 modelsummary(mods,
-  stars = TRUE, statistic = "[{conf.low} - {conf.high}]",
-  coef_omit = "SD|Cor",
-  # coef_rename = c("log1p(mean_pedcounts)"="PC (log)",
-  #                 "log1p(mean_pedcounts)Structure"="PC (log) x Structure",
-  #                 "log1p(mean_pedcounts)Scenery"="PC (log) x Scenery",
-  #                 "log1p(mean_pedcounts)Familiarity"="PC (log) x Familiarity",
-  #                 "log1p(mean_pedcounts)Width"="PC (log) x Width"),
-  title = "Non-linear mixed effects models of psychological reaction",
+  stars = TRUE, statistic = "[{conf.low} - {conf.high}]", escape = FALSE,
+  coef_omit = "SD|Cor", 
+  coef_rename = c("Typologygreen"="Green",
+                  "Familiarity"  = "Familiarity",
+                  "Typologyurbanpoly(Crowdedness, 2)1"="Urban * Crowdedness",
+                  "Typologygreenpoly(Crowdedness, 2)1"="Green * Crowdedness",
+                  "Typologyurbanpoly(Crowdedness, 2)2"="Urban * Crowdedness<sup> 2</sup>",
+                  "Typologygreenpoly(Crowdedness, 2)2"="Green * Crowdedness<sup> 2</sup>",
+                  "TypologyurbanBeauty" = "Urban * Beauty",
+                  "TypologygreenBeauty" = "Green * Beauty",
+                  "Typologyurbanpoly(Crowdedness, 2)1Beauty" = "Urban * Crowdedness * Beauty",
+                  "Typologygreenpoly(Crowdedness, 2)1Beauty" = "Green * Crowdedness * Beauty",
+                  "Typologyurbanpoly(Crowdedness, 2)2Beauty" = "Urban * Crowdedness<sup> 2</sup> * Beauty",
+                  "Typologygreenpoly(Crowdedness, 2)2Beauty" = "Green * Crowdedness<sup> 2</sup> * Beauty"
+                  ),
+  title = "Non-linear mixed effects models of psychological reaction"
   # notes = "PC (log) : Average pedestrian count per stimulus" ,
-  output = "output/table_models_psych_reaction.tex"
+  # output = "output/table_models_psych_reaction.tex"
 )
 ```
 
