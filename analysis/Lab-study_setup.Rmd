@@ -45,11 +45,11 @@ length(unique(df$Participant))
 ## Dataset Selection
 
 ### Videos Data
-
+Calculate the number of views and average score for each video (stimulus).
 ```{r message=FALSE, warning=FALSE}
 df_stim <- df |>
   group_by(Video, Typology) |>
-  summarize(n = n(),
+  summarize(views = n(),
             Video_duration = first(Video_Time),
             name_df = first(name_df),
             Perceived_Crowdedness = mean(Crowdedness, na.rm = TRUE),
@@ -83,133 +83,120 @@ nrow(df_stim)
 #   select(-Video, -n, -Typology)
 ```
 
-
-```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-# r <- correlation(data)
-# 
-# plot(summary(r)) +
-#   theme_minimal() +
-#   theme(plot.title = element_text(hjust = 0.5, face="bold"))
-# 
-# plot(parameters::n_factors(data, cor=as.matrix(r)))
-# 
-# fa <- parameters::factor_analysis(data, n=2, rotation = "oblimin", sort=TRUE)
-# 
-# fa
-# 
-# df <- df |>
-#   cbind(
-#     predict(fa,
-#       newdata = select(df, Crowdedness, Beauty, Restoration, Presence,
-#                        Attractiveness, Structure, Scenery, Interest, Width,
-#                        Familiarity, Positivity, Excitement),
-#       names = c("Appeal", "Liveliness", "Familiarity")
-#     )
-#   )
-
-```
-
-### Clustering and Distance {.tabset}
-
-```{r, warning=FALSE, message=FALSE, eval=FALSE}
-# d <- df_stim |>
-#   select(-Video, -n, -Typology) |>
-#   dist() |>
-#   as.matrix()
-# 
-# plot(estimate_density(d))
-```
-
-
 ## Remove stimuli
+
 Some videos need to be removed (e.g. less than 30 seconds, low resolution).
 
 ```{r}
 
-data <- df_stim %>% 
+data_urban <- df_stim %>% 
   rowid_to_column() %>% 
   filter(Typology == "urban") %>% 
   filter(Video_duration >= 30) %>% 
-  # filter(str_detect(tolower(name_df), "vancouver"))
+  filter(str_detect(tolower(name_df), "vancouver", negate = TRUE)) %>% 
   select(rowid, Perceived_Crowdedness, Beauty) 
 
-nrow(data)
+data_green <- df_stim %>% 
+  rowid_to_column() %>% 
+  filter(Typology == "green") %>% 
+  filter(Video_duration >= 30) %>% 
+  filter(str_detect(tolower(name_df), "vancouver", negate = TRUE)) %>% 
+  select(rowid, Perceived_Crowdedness, Beauty) 
+
+nrow(data_urban)
+nrow(data_green)
+
 ```
 
 ## Stimuli clustering
 Cluster objects
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
+data = data_urban
+find_most_dissimilar <- function (data, k_clusters = 50){
+  
+  d <- dist(data %>% select(-rowid), diag = TRUE, upper=TRUE)
+  plot(hclust(d))
+  
+  # split in k clusters, where k corresponds to the amount of stimuli we want at the new study
+  clusters <- cutree(hclust(d), k = k_clusters)
+  hist(clusters)
+  table(clusters)
+  
+  ## Calculate dissimilarity matrix
+  ## combine results, take sum to aggregate dissimilarity
 
-d <- dist(data %>% select(-rowid), diag = TRUE, upper=TRUE)
-
-plot(hclust(d))
-
-# split in k clusters, where k corresponds to the amount of stimuli we want at the new study
-k = 50
-clusters <- cutree(hclust(d), k = k)
-hist(clusters)
-table(clusters)
-```
-
-## Calculate dissimilarity matrix
-```{r, warning=FALSE, message=FALSE, eval=FALSE}
-
-# combine results, take sum to aggregate dissimilarity
-dissimilarity_clusters <- data.frame(rowid=data %>% select(rowid),
+  dissimilarity_clusters <- data.frame(rowid=data %>% select(rowid),
                   cluster=clusters,
                   dissimilarity=rowSums(as.matrix(d)))
-dissimilarity_clusters
+  dissimilarity_clusters
 
-# order, lowest overall dissimilarity will be first
-dissimilarity_clusters <- dissimilarity_clusters[order(dissimilarity_clusters$dissimilarity), ]
+  # order, lowest overall dissimilarity will be first
+  dissimilarity_clusters <- dissimilarity_clusters[order(dissimilarity_clusters$dissimilarity, decreasing = T), ]
+  
+  # split object
+  reslist <- split(dissimilarity_clusters, f = dissimilarity_clusters$cluster)
+  reslist
+  
+  ## returns id´s with highest overall dissimilarity
+  redundant <- sapply(reslist, function(x) {
+    if(nrow(x) > 1) {
+      return(head(x, n=1)$rowid)
+    } else {
+      # return(NA)
+      return(head(x, n=1)$rowid)
+    }
+   })
+  
+  redundant <- redundant[!is.na(redundant)]
+  length(redundant)
+  redundant
+  
+  final_set <- dissimilarity_clusters %>%
+    filter(rowid %in% unname(redundant))
+  
+  return(final_set)
+}
 
-# split object
-reslist <- split(dissimilarity_clusters, f=dissimilarity_clusters$cluster)
-reslist
-## takes first three items with highest overall dissim.
-# lapply(reslist, head, n=1)
 
-## returns id´s with highest overall dissimilarity
-redundant <- sapply(reslist, function(x) {
-  if(nrow(x) > 1) {
-    return(head(x, n=1)$rowid)
-  } else {
-    # return(NA)
-    return(head(x, n=1)$rowid)
-  }
- })
-
-length(redundant)
-redundant <- redundant[!is.na(redundant)]
-length(redundant)
-redundant
 ```
+
+
 
 ```{r}
 
 video_data <- read_csv("../../NICE_Group-Folder/3_materials/stimuli_scripts/final_set_with_testing_groups_typology_220914.csv")
 
-final_set <- dissimilarity_clusters %>% 
-  filter(rowid %in% unname(redundant))
+final_set_urban <- find_most_dissimilar(data_urban, 35)
+final_set_green<- find_most_dissimilar(data_green, 15)
+
+final_set <- final_set_urban %>% 
+  bind_rows(final_set_green)
 
 final_set <- df_stim %>% 
   rowid_to_column() %>% 
-  filter(rowid %in% unname(redundant)) %>% 
+  left_join(final_set) %>% 
+  # filter(!is.na(cluster)) %>% 
+  # filter(rowid %in% unname(redundant)) %>% 
   left_join(video_data, by = c("Video" = "link" ))
 
   
-# final_set <- final_set %>% 
-#   select(videoname, Typology, Perceived_Crowdedness, Pedestrian_flow, Beauty, Structure, Interest)
+final_set <- final_set %>%
+  select(name_df_keep, cluster, dissimilarity, Typology, Perceived_Crowdedness, Pedestrian_flow, Beauty, Structure, Interest)
 
 final_set
 ```
 
 ## inspect final set
+```{r}
+final_set %>% filter(!is.na(cluster)) %>% select(name_df_keep) %>% print(n = 100)
+```
+
 
 ```{r}
 
 final_set %>% 
+  filter(!is.na(cluster)) %>% 
   count(Typology)
 
 ```
@@ -224,18 +211,18 @@ final_set %>%
 final_set %>% 
   # filter(Typology != "green") %>% 
   arrange(Beauty) %>% 
-  ggplot(aes(Beauty, Perceived_Crowdedness, colour = Typology, shape = Typology)) +
+  ggplot(aes(Beauty, Perceived_Crowdedness, shape = Typology, colour = !is.na(cluster))) +
   geom_point() +
   theme_blackboard() +
   ggdist::geom_slab() +
-  ggside::geom_xsidehistogram(binwidth = 1) +
-  ggside::geom_ysidehistogram(binwidth = 1)
+  ggside::geom_xsidedensity(adjust = 2) +
+  ggside::geom_ysidedensity(adjust = 2)
 
 ```
 
 ```{r}
 final_set %>% 
-    # filter(Typology != "green") %>% 
+    filter(!is.na(cluster)) %>%
     arrange(Beauty) %>% 
     ggplot(aes(Perceived_Crowdedness, colour = Typology, shape = Typology)) +
     theme_blackboard() +

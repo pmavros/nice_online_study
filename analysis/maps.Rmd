@@ -1,0 +1,186 @@
+---
+title: "NICE Online"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(patchwork)
+library(tidyverse)
+
+df <- read.csv("../../NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv") |>
+  mutate(
+    Typology = fct_relevel(primary_category, "urban", "green"),
+    Positivity = datawizard::rescale(Positivity, to = c(1, 7), range = c(1, 9)),
+    Excitement = datawizard::rescale(Excitement, to = c(1, 7), range = c(1, 9))
+  )
+
+nrow(df)
+length(unique(df$Participant))
+
+people_geo <- df %>% group_by(Participant) %>% slice(1)
+countries <- people_geo %>%
+  mutate(Nationality = recode(Nationality, "Czech Republic"="Czech Rep.",
+                              "United States" = "USA",
+                              "Venezuela, Bolivarian Republic of"="Venezuela" )) %>%
+  ungroup() %>%
+  count(Nationality, name = "people_per_country")
+
+countries %>% arrange(Nationality) %>% print(n = 100)
+
+
+countries
+
+places_geo <- read_csv( file = "../../NICE_Group-Folder/3_materials/stimuli_scripts/final_set_geocoded.csv")
+
+places_geo <- places_geo %>%
+  group_by(city, country, lat, long) %>%
+  count() %>%
+  ungroup()
+
+
+
+#Using GGPLOT, plot the Base World Map
+library("rnaturalearth")
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+world_participant <- world %>%
+  mutate(name = recode(name, "United States"= "USA")) %>%
+  left_join(countries, by = c("name"="Nationality"))
+
+sum(world_participant$people_per_country, na.rm=T)
+
+class(world)
+
+# ggplot(data = world_participant, aes(fill = people_per_country)) +
+#   geom_sf()
+participants <- countries %>% mutate(message = paste(Nationality,": ", people_per_country)) %>%
+  pull(message) %>% paste(., collapse = ", ")
+
+stimuli <- places_geo %>% count(country) %>% mutate(message = paste(country,": ", n)) %>%
+  pull(message) %>% paste(., collapse = ", ")
+
+
+p_world <- world_participant %>%
+  filter(!str_detect(name, "Antarctic")) %>%
+  mutate(people_per_country = ifelse(is.na(people_per_country), 0, people_per_country),
+         n_per_country = cut(people_per_country, breaks = c( 1, 5,10, 20, 40, 60, 1000), labels = c("1-5", "5-10", "10-20", "20-40", "40-60", ">60") )) %>%
+  ggplot() +
+  geom_sf(aes(fill = n_per_country) , size = .2) +
+  geom_point(aes(x=long, y=lat,size = n), data = places_geo, shape = 21, colour="black", stroke  = 1 ) +
+  # geom_text_repel(aes())
+  scale_fill_viridis_d(option = "plasma", na.value = "lightgrey") +
+  theme_void() + theme(legend.position = "bottom")+
+  # theme_modern(legend.position = "bottom") +
+  labs(title = "Geographic distribution of the study",
+       subtitle = "Stimuli and Participants",
+       fill = "N",
+       size = "Stimuli"
+  ) # caption = paste(participants, "\n", stimuli)
+
+p_world
+
+p_people <- countries %>%
+  filter(people_per_country > 2) %>%
+  ggplot(aes(reorder(Nationality, people_per_country ), people_per_country)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_modern() +
+  labs(y = "N", x = "Nationality", title = "379 participants from 41 nationaliies")
+
+extra_text <- countries %>%
+  filter(people_per_country < 2) %>% pull(Nationality) %>% paste0(., collapse = ", ") %>%
+  paste( "In adition, 1-2 participants from:", .) %>%
+  str_wrap( width = 40)
+
+p_people <- p_people + annotate("text", x = 4, y = 30, label = extra_text, hjust = 0)
+
+# stimuli
+places_geo %>%
+  group_by(country) %>%
+  summarise(sum = sum(n))
+
+p_stimuli <- places_geo %>%
+  group_by(country) %>%
+  summarise(sum = sum(n)) %>%
+  ggplot(aes(reorder(country, sum ), sum)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_modern() +
+  labs(y = "N", x = "Country", title = "480 stimuli from 20 countries")
+
+# visual properties
+df <- read.csv("../../NICE_Group-Folder/5_data/1_Online_study/Stimuli_Analysis/data.csv")
+df %>% tail()
+
+df <- df %>%
+  # select(File) %>%
+  mutate(to = str_replace_all(File, pattern = " ", replacement = "_")) %>%  # convert white space to _
+  mutate(to= str_remove_all(to, pattern = ".mp4|1080pmp4|.MOV")) %>%
+  mutate(to= str_remove_all(to, pattern = "1080p")) %>%
+  mutate(to= str_remove_all(to, pattern = "1080")) %>%   mutate(to = str_replace_all(to, pattern ="[(,)]", replacement = "")) %>% # remove ()
+  mutate(to = str_replace_all(to, pattern ="\\[|\\]|\\'", replacement = "")) %>%  # remove sqare brackets
+  mutate(clean_name = str_replace_all(to, pattern ="_-_|___|__|-_", replacement = "_")) %>%   # clean up "_-_" or "-_" to simply "-"
+  select(clean_name, Colorfulness, Contrast, Luminance_Perceived, Entropy)
+
+stimuli <- read_csv("../../NICE_Group-Folder/3_materials/stimuli_scripts/final_set_with_testing_groups_typology_220914.csv")
+
+stimuli <- stimuli %>%
+  rename(File = name_df_keep) %>%
+  mutate(to = str_replace_all(File, pattern = " ", replacement = "_")) %>%  # convert white space to _
+  mutate(to= str_remove_all(to, pattern = ".mp4|1080pmp4|.MOV")) %>%
+  mutate(to= str_remove_all(to, pattern = "1080p")) %>%
+  mutate(to= str_remove_all(to, pattern = "1080")) %>%
+  mutate(to = str_replace_all(to, pattern ="[(,)]", replacement = "")) %>% # remove ()
+  mutate(to = str_replace_all(to, pattern ="\\[|\\]|\\'", replacement = "")) %>%  # remove sqare brackets
+  mutate(clean_name = str_replace_all(to, pattern ="_-_|___|__|-_", replacement = "_")) %>%
+  select(File, clean_name, primary_category, Country, mean_pedcounts, max_pedcounts)
+
+
+# counts <- read_csv("../../NICE_Group-Folder/9_analysis/Online Study/data/average_count.csv")
+# counts
+scored_stimuli <- stimuli %>%
+  left_join(df) %>%
+  select(-File)
+
+summary(scored_stimuli)
+
+scored_stimuli %>% filter(is.na(Entropy)) %>% select(File, clean_name)
+# df %>% filter(str_detect(clean_name, "Walking_Bloomsbury")) %>% select(clean_name)
+# effectsize::standardize()
+  #
+col_urban = "#FFC125" # "#E1BE6A"
+col_green = "#40B0A6"
+
+p_visual <- scored_stimuli %>%
+  pivot_longer(cols = mean_pedcounts:Entropy) %>%
+  mutate(name = recode_factor(name, "Luminance_Perceived"="Perceived Luminance", mean_pedcounts = "Average Pedestrian Count",
+                              max_pedcounts = "Max Pedestrian Count")) %>%
+  ggplot(aes(value, fill = primary_category)) +
+  geom_density(alpha = .5) +
+  geom_rug() +
+  # ggnewscale::new_scale_fill() +
+  scale_fill_manual(values = c("urban" = col_urban, "green" = col_green)) +
+  facet_wrap(.~name, scales = "free") +
+  theme_modern() +
+  theme(axis.text.y = element_blank(), axis.title.x = element_blank()) +theme(legend.position = "bottom") +
+  labs(title = "Visual properties", y = "Density", fill = "Typology")
+
+p_visual
+p1 <- p_world
+p2 <- p_people + p_stimuli
+(p1 / (p2 / p_visual )) + plot_annotation(title = "Overview of stimuli and participants", tag_levels = "A")
+
+ggsave("figures/overview.jpg", width = 8, height = 12, dpi = 450, scale = 1)
+```
+
