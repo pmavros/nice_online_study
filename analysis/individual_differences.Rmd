@@ -1,0 +1,73 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+
+library(lmerTest)
+library(ordinal)
+library(datawizard)
+
+```
+
+```{r}
+
+df <- read.csv('../../NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv') |> 
+  mutate(Typology = fct_relevel(primary_category, "urban", "green"))
+
+length(unique(df$Participant))
+
+df
+df$mean_pedcounts
+
+df$Positivity_factor <- factor(df$Positivity, levels = 1:9)
+df$Participant_factor <- as.factor(df$Participant)
+
+fit <- ordinal::clmm(Positivity_factor ~ mean_pedcounts + (1|Participant_factor), data =  df)
+
+summary(fit)
+
+```
+
+Extract participant-level intercepts from the model
+
+```{r}
+
+re <- ranef(fit, condVar=TRUE)
+
+ran_ef <- data.frame(ranef(fit)) %>% rownames_as_column() %>% set_names(c("Participant", "condval"))
+hist(ran_ef$condval)
+
+```
+
+Merge participant trait responses (e.g. preference for crowds) with reactions (random intercepts)
+
+```{r}
+test <- df %>% 
+  group_by(Participant) %>% 
+  dplyr::slice(1) %>% 
+  # select(Participant, Crowd_Preference_Mean) %>% 
+  left_join(ran_ef, by = c("Participant"="Participant"))
+
+names(test)
+```
+
+Correlation between preference for crowds and psychological reaction when crowded
+
+```{r}
+
+
+cor_test(data = test, x =  "Crowd_Preference_Mean", y = "condval", bayesian = T)
+
+
+```
+
+Print (draft)
+
+```{r}
+test %>% 
+  ggplot(aes(Crowd_Preference_Mean, condval)) + 
+  geom_point() + 
+  geom_smooth(method = "lm")
+```

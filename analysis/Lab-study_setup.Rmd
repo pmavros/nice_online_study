@@ -94,13 +94,14 @@ data_urban <- df_stim %>%
   filter(Typology == "urban") %>% 
   filter(Video_duration >= 30) %>% 
   filter(str_detect(tolower(name_df), "vancouver", negate = TRUE)) %>% 
+  filter(str_detect(tolower(name_df), "vancouver", negate = TRUE))   %>% 
   select(rowid, Perceived_Crowdedness, Beauty) 
 
 data_green <- df_stim %>% 
   rowid_to_column() %>% 
   filter(Typology == "green") %>% 
   filter(Video_duration >= 30) %>% 
-  filter(str_detect(tolower(name_df), "vancouver", negate = TRUE)) %>% 
+  filter(str_detect(tolower(name_df), "vancouver|green corridor", negate = TRUE)) #%>% 
   select(rowid, Perceived_Crowdedness, Beauty) 
 
 nrow(data_urban)
@@ -112,7 +113,6 @@ nrow(data_green)
 Cluster objects
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
-data = data_urban
 find_most_dissimilar <- function (data, k_clusters = 50){
   
   d <- dist(data %>% select(-rowid), diag = TRUE, upper=TRUE)
@@ -167,8 +167,8 @@ find_most_dissimilar <- function (data, k_clusters = 50){
 
 video_data <- read_csv("../../NICE_Group-Folder/3_materials/stimuli_scripts/final_set_with_testing_groups_typology_220914.csv")
 
-final_set_urban <- find_most_dissimilar(data_urban, 35)
-final_set_green<- find_most_dissimilar(data_green, 15)
+final_set_urban <- find_most_dissimilar(data_urban, 20)
+final_set_green<- find_most_dissimilar(data_green, 20)
 
 final_set <- final_set_urban %>% 
   bind_rows(final_set_green)
@@ -189,7 +189,7 @@ final_set
 
 ## inspect final set
 ```{r}
-final_set %>% filter(!is.na(cluster)) %>% select(name_df_keep) %>% print(n = 100)
+final_set %>% filter(!is.na(cluster), Typology == "green") %>% select(name_df_keep) %>% print(n = 100)
 ```
 
 
@@ -211,12 +211,13 @@ final_set %>%
 final_set %>% 
   # filter(Typology != "green") %>% 
   arrange(Beauty) %>% 
-  ggplot(aes(Beauty, Perceived_Crowdedness, shape = Typology, colour = !is.na(cluster))) +
+  ggplot(aes(Beauty, Perceived_Crowdedness, linetype = Typology, colour = !is.na(cluster))) +
   geom_point() +
   theme_blackboard() +
   ggdist::geom_slab() +
-  ggside::geom_xsidedensity(adjust = 2) +
-  ggside::geom_ysidedensity(adjust = 2)
+  ggside::geom_xsidehistogram() +
+  ggside::geom_ysidehistogram() +
+  facet_wrap(.~Typology)
 
 ```
 
