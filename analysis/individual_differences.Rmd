@@ -8,7 +8,7 @@ output: html_notebook
 library(lmerTest)
 library(ordinal)
 library(datawizard)
-
+library(tidyverse)
 ```
 
 ```{r}
@@ -21,11 +21,13 @@ length(unique(df$Participant))
 df
 df$mean_pedcounts
 
-df$Positivity_factor <- factor(df$Positivity, levels = 1:9)
-df$Participant_factor <- as.factor(df$Participant)
+# df$Positivity_factor <- factor(df$Positivity, levels = 1:9)
+# df$Participant_factor <- as.factor(df$Participant)
 
-fit <- ordinal::clmm(Positivity_factor ~ mean_pedcounts + (1|Participant_factor), data =  df)
-
+# fit <- ordinal::clmm(Positivity_factor ~ mean_pedcounts + (1|Participant_factor), data =  df)
+fit0 <-lmer(Positivity ~ 1 + (1  | Participant), data =  df)
+fit <-lmer(Positivity ~ mean_pedcounts + (1 + mean_pedcounts | Participant), data =  df)
+anova(fit0, fit)
 summary(fit)
 
 ```
@@ -34,10 +36,32 @@ Extract participant-level intercepts from the model
 
 ```{r}
 
+# f <- paste(resp, " ~ mean_pedcounts + Beauty + (mean_pedcounts + Beauty |Participant)")
+#   model <- glmmTMB::glmmTMB(as.formula(f), data = df)
+  re2 <- modelbased::estimate_grouplevel(fit) |>
+    modelbased::reshape_grouplevel(indices = "Coefficient") |>
+    # select(c(1, 3, 4)) |>
+    group_by(Participant) |>
+    slice(1) |>
+    data_addprefix(paste0(resp, "_"), exclude = "Participant") |>
+    merge(dfsub, by = "Participant")
+
+  
+re <- lme4::ranef(fit)
+names(re)
 re <- ranef(fit, condVar=TRUE)
 
 ran_ef <- data.frame(ranef(fit)) %>% rownames_as_column() %>% set_names(c("Participant", "condval"))
 hist(ran_ef$condval)
+re <- coef(fit)
+re <- data.frame(Participant = rownames( re$Participant), Intercept = re$Participant$`(Intercept)`, Slope = re$Participant$mean_pedcounts)
+
+library(metR)
+re  %>%  ggplot(aes( Intercept,  Intercept, angle = Slope, mag =1)) + geom_arrow() 
+
+re  %>%  ggplot(aes( Slope)) + geom_histogram()
+
+re  %>%  ggplot(aes(x = Intercept, y =Intercept,angle = Slope*100, mag =100, colour = Slope >0)) +  geom_vector()
 
 ```
 
@@ -48,7 +72,7 @@ test <- df %>%
   group_by(Participant) %>% 
   dplyr::slice(1) %>% 
   # select(Participant, Crowd_Preference_Mean) %>% 
-  left_join(ran_ef, by = c("Participant"="Participant"))
+  left_join(re, by = c("Participant"="Participant"))
 
 names(test)
 ```
@@ -58,7 +82,14 @@ Correlation between preference for crowds and psychological reaction when crowde
 ```{r}
 
 
-cor_test(data = test, x =  "Crowd_Preference_Mean", y = "condval", bayesian = T)
+cor_test(data = test, x =  "Crowd_Preference_Mean", y = "Intercept", bayesian = F)
+cor_test(data = test, x =  "Crowd_Preference_Mean", y = "Slope", bayesian = F)
+
+cor_test(data = test, x =  "ipip_Extroversion", y = "Slope", bayesian = F)
+cor_test(data = test, x =  "ipip_Extroversion", y = "Intercept", bayesian = F)
+cor_test(data = test, x =  "ipip_Openness", y = "Intercept", bayesian = F)
+cor_test(data = test, x =  "SSA_Mean", y = "Intercept", bayesian = F)
+
 
 
 ```
@@ -67,7 +98,7 @@ Print (draft)
 
 ```{r}
 test %>% 
-  ggplot(aes(Crowd_Preference_Mean, condval)) + 
+  ggplot(aes(Crowd_Preference_Mean, Slope)) + 
   geom_point() + 
   geom_smooth(method = "lm")
 ```
