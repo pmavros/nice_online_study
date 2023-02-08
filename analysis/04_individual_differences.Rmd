@@ -1,0 +1,198 @@
+---
+title: "Online Study: Individual differences"
+output: html_notebook
+---
+
+```{r message=FALSE}
+library(tidyverse)
+library(lmerTest)
+library(correlation)
+library(datawizard)
+library(report)
+```
+
+In this script we examine individual differences in perceived crowdedness. 
+
+We first read the pre-processed data from participants. 
+
+```{r}
+df <- read.csv('~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv') |> 
+  mutate(Typology = fct_relevel(primary_category, "urban", "green"))
+
+length(unique(df$Participant))
+
+df
+plot(df$mean_pedcounts)
+```
+## Crowd Preference
+
+Here we extract one row per participant, which contains the demographic and personality and responses to the survey. 
+
+```{r }
+dfsub <- df |>
+  group_by(Participant) |>
+  select(Participant, Age, Sex, Language, Crowd_Preference_Mean, starts_with("ipip"), SSA_Mean, SPS_Total_Mean, SIAS_Total_Mean, NSS, Upbringing_Environment, Current_Environment.y) |>
+  slice(1) |>
+  ungroup()
+
+nrow(dfsub)
+```
+
+### Determinants of Crowd preference
+
+```{r}
+dfsub <- dfsub %>% 
+  filter(!is.na(Crowd_Preference_Mean))
+
+correlation::correlation(select(dfsub, Crowd_Preference_Mean),
+  select(dfsub, SSA_Mean),
+  bayesian = TRUE
+) |>
+  arrange(desc(BF)) 
+
+crowd_cortests <- correlation::correlation(select(dfsub, Crowd_Preference_Mean),
+  select(dfsub, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
+  bayesian = TRUE
+) |>
+  arrange(desc(BF)) 
+
+crowd_cortests <- crowd_cortests %>% 
+  mutate(Parameter1 = recode_factor(Parameter1, "Crowd_Preference_Mean"="Crowd Prefs" )) %>% 
+  mutate(Parameter2 = recode_factor(Parameter2, 
+                                    "ipip_Extroversion"="Extraversion", 
+                                    "ipip_Honesty" = "Honesty", 
+                                    "NSS" = "NSS", 
+                                    "SSA_Mean" = "SSA", 
+                                    "SIAS_Total_Mean" = "SIAS", 
+                                    "SPS_Total_Mean" = "SPS",
+                                    "ipip_Neuroticism" = "Neuroticism", 
+                                    "ipip_Openness" = "Openness", 
+                                    "ipip_Agreeableness" = "Agreeableness",
+                                    "ipip_Conscientiousness" = "Conscientiousness", 
+                                    "Age" = "Age"
+                                    )) %>% 
+  data.frame() %>% 
+  mutate(Parameter = paste(Parameter1, "~", Parameter2), 
+         Median = sprintf(fmt ="%.03f",rho),
+         `95% CI` = sprintf(fmt="[ %.3f - %.3f ]", CI_low, CI_high),
+         BF = insight::format_bf(BF, name = NULL, exact = F, stars =  T)) %>% 
+  select(Parameter, Median, `95% CI`, BF)
+
+
+```
+
+
+```{r}
+
+t1 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Sex, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
+t2 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Upbringing_Environment, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
+t3 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Current_Environment.y, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
+
+library(bayestestR)
+library(kableExtra)
+
+
+crowd_ttests <- describe_posterior(t1) |>
+  bind_rows(describe_posterior(t2)) |>
+  bind_rows(describe_posterior(t3)) |>
+  mutate(Parameter = c("Crowd Prefs ~ Sex", "Crowd Prefs ~ Upbringing Env. ", "Crowd prefs ~ Current Env.")) %>% 
+  data.frame() %>%
+  mutate(Median = sprintf(fmt ="%.03f",Median),
+         `95% CI` = sprintf(fmt="[ %.3f - %.3f ]", CI_low, CI_high), 
+         BF = insight::format_bf(BF, name = NULL, exact = F, stars =  T) ) %>%  #sprintf(fmt ="%.03f", BF, )) %>% 
+  select(Parameter, Median, `95% CI` , BF) 
+crowd_ttests
+
+crowd_cortests %>% bind_rows(crowd_ttests) %>% 
+  kbl(., format = "latex", escape = T, caption = "Determinants of Crowd preference", booktabs = T, label = "crowd_pref") %>% 
+  group_rows(start_row = 1, end_row = 11, group_label = "Bayesian Pearson Correlations", bold = F) %>% 
+    group_rows(start_row = 12, end_row = 14, group_label = "Bayesian T-tests", bold = F) %>% 
+  kable_classic_2() %>% 
+  save_kable(file = "output/table_determinants_crowd_pref.tex")
+
+```
+
+Responses by preferences
+
+```{r}
+
+# dfsub %>% 
+#   ungroup() %>% 
+#   select(Crowd_Preference_Mean, ipip_Extroversion,
+#   ipip_Agreeableness, ipip_Conscientiousness,
+#   ipip_Neuroticism, ipip_Openness, ipip_Honesty ) %>% 
+#   correlation(partial = TRUE) %>% 
+#   # data.frame()
+#   filter(p < 0.001) %>% 
+#   plot()
+
+
+
+```
+
+
+
+```{r}
+
+fit0 <-lmer(Positivity ~ 1 + (1  | Participant), data =  df)
+fit <-lmer(Positivity ~ mean_pedcounts + Beauty + (1 + mean_pedcounts | Participant) + (1|Nationality), data =  df)
+anova(fit0, fit)
+anova(fit)
+report(fit)
+
+```
+
+Extract participant-level intercepts from the model
+
+```{r}
+re <- lme4::ranef(fit)
+names(re)
+
+re <- data.frame(Participant = rownames( re$Participant), 
+                 Intercept = re$Participant$`(Intercept)`, 
+                 Slope = re$Participant$mean_pedcounts)
+```
+
+Merge participant trait responses (e.g. preference for crowds) with reactions (random intercepts)
+
+```{r}
+dfsub <- dfsub %>% 
+  left_join(re, by = c("Participant"="Participant"))
+
+names(dfsub)
+```
+
+Correlation between preference for crowds and psychological reaction when crowded
+
+```{r}
+
+correlation::correlation(select(dfsub, Intercept),
+  select(dfsub, Crowd_Preference_Mean, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
+  bayesian = TRUE
+)
+
+```
+```{r}
+
+correlation::correlation(select(dfsub, Intercept),
+  select(dfsub, Crowd_Preference_Mean, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
+  bayesian = TRUE
+)
+
+correlation::correlation(select(dfsub, Intercept, Slope),
+  select(dfsub, Crowd_Preference_Mean),
+  bayesian = TRUE
+)
+
+```
+
+Print (draft)
+
+```{r}
+test %>% 
+  ggplot(aes(Crowd_Preference_Mean, Intercept)) + 
+  geom_point() + 
+  geom_smooth(method = "lm")
+```
+
+

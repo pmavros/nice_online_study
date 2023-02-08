@@ -102,15 +102,29 @@ plot_distributions <- function(df, col) {
 ```{r message=FALSE, warning=FALSE}
 # path <-
   # df <- read.csv("C:/Dropbox/RECHERCHE/Projects/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv") |>
-df <- read.csv("../../NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv") |>
+df <- read.csv("~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv") |>
   mutate(
     Typology = fct_relevel(primary_category, "urban", "green"),
     Positivity = datawizard::rescale(Positivity, to = c(1, 7), range = c(1, 9)),
     Excitement = datawizard::rescale(Excitement, to = c(1, 7), range = c(1, 9))
   )
 
-nrow(df)
+# remove 2 participants that have 30 and 21 trials with video playback < video duration; 
+# remove 1 trial from another participant with the same issue (but keep remaining trials).
+
+df <- df %>% 
+  filter(Buffering > 0, !(Participant %in% c("5fbb7aae04da87a3fe5f129c", "5d0cd09edff7d70019e6e045")))
+
+df %>% 
+   group_by(Participant) %>% tally() %>% arrange(n) %>% pull(n) %>% range(.)
+
+df %>% 
+   group_by(Video) %>% tally() %>% arrange(n) %>% summarise(mean(n), range(n), sd(n))
+
 ```
+
+
+
 
 ## Participant
 Here we only provide an overview to confirm we have loaded the correct amount of participants -- as a sanity check. Participant characteristics are analysed and reported by a different file (Table 1).
@@ -147,17 +161,27 @@ A total of `r report::report_participants(dfsub, age="Age")` participants were i
 library(see)
 library(correlation)
 
-p_corrplot <- df %>% 
-  select(Crowdedness, mean_pedcounts, Attractiveness, Positivity, Excitement, Restoration, Presence, Beauty, Interest, Structure, Width) %>%
-  rename("Ped. Counts" = "mean_pedcounts", 
-         "WTW" = "Attractiveness") %>% 
+p_corrplot_u <- dfenv %>% 
+  filter(Typology == "Urban") %>% 
+  select(WLW = Willingness.to.walk, Crowdedness, Valence, Excitement, Restoration, Presence, Beauty, Interest, Structure, Width) %>%
   correlation(., bayesian = T) %>% 
   summary(redundant = FALSE) %>%
-  plot() + scale_x_discrete(position = "top") +
+  plot() + scale_x_discrete(position = "top") + labs(title = "Urban spaces") +
   theme_modern()
 
-p_corrplot
-ggsave(p_corrplot, filename = "output/plots_corr.jpg", width = 13, height = 7, dpi = 300)
+p_corrplot_g <- dfenv %>% 
+  filter(Typology == "Green") %>% 
+  select(WLW = Willingness.to.walk, Crowdedness, Valence, Excitement, Restoration, Presence, Beauty, Interest, Structure, Width) %>%
+  correlation(., bayesian = T) %>% 
+  summary(redundant = FALSE) %>% 
+  plot() + scale_x_discrete(position = "top") + labs(title = "Green spaces") +
+  theme_modern()
+
+p_corrplot_g
+
+
+p_corr <- p_corrplot_u / p_corrplot_g + plot_annotation(title = "Correlation Matrix")
+ggsave(p_corr, filename = "output/plots_corr.jpg", width = 13, height = 7, dpi = 300)
 
 
 ```
@@ -545,39 +569,87 @@ p_reg
 ggsave(p_reg, filename = "output/plots_reg.jpg", width = 13, height = 13, dpi = 300)
 ```
 
-## Inter-individual Correlations
-
-### Correlates of Individual-level effects
-
-### Determinants of Crowd preference
 
 ```{r}
-correlation::correlation(select(dfsub, Crowd_Preference_Mean),
-  select(dfsub, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
-  bayesian = TRUE
-) |>
-  arrange(desc(BF)) 
+dfenv <- df %>% 
+  group_by(name_df_keep, Typology) %>% 
+  summarise_at(.vars = c( "Restoration", "Attractiveness","Presence", "Width", "Structure", "Beauty","Interest", "Scenery", "Familiarity",  "Positivity","Excitement", "Crowdedness" ), .funs = function(x) mean(x, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(Typology = recode_factor(Typology, "urban" = "Urban", "green" = "Green" )) %>% 
+  rename(`Willingness to walk` = Attractiveness, 
+         Valence = Positivity)
+
 ```
 
 
 ```{r}
-t1 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Sex, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
-t2 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Upbringing_Environment, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
-t3 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Current_Environment.y, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
+pvalue <- function(x, ...) {
+    # Construct vectors of data y, and groups (strata) g
+    y <- unlist(x)
+    g <- factor(rep(1:length(x), times=sapply(x, length)))
+    if (is.numeric(y)) {
+        # For numeric variables, perform a standard 2-sample t-test
+        # p <- t.test(y ~ g)$p.value
+        p <- BayesFactor::ttestBF(x=y, y= g)
+        p <- p@bayesFactor$bf
+            # print(p)
+    } else {
+        # For categorical variables, perform a chi-squared test of independence
+        p <- chisq.test(table(y, g))$p.value
+    }
+    # Format the p-value, using an HTML entity for the less-than sign.
+    # The initial empty string places the output on the line below the variable label.
+    c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+```
 
-library(bayestestR)
-library(kableExtra)
-crowd_ttests <- describe_posterior(t1) |>
-  bind_rows(describe_posterior(t2)) |>
-  bind_rows(describe_posterior(t3)) |>
-  mutate(Parameter = c("Crowd_Preference ~ Sex", "Crowd_Preference ~ Upbringing Env.", "Crowd preference ~ Current Env.")) %>% 
+
+```{r}
+t1 <- table1::table1(~ Valence + Excitement + Restoration + Beauty + `Willingness to walk` + Interest + Familiarity + Structure + Presence  + Crowdedness  | Typology, overall = F,
+    data=dfenv, extra.col=list(`BF`=pvalue))
+
+t1 %>% 
   data.frame() %>% 
-  mutate(CI = paste("[",round(CI_low, 3),"-", round(CI_high, 3),"]")) %>% 
-  select(Parameter, Median,CI , BF) 
-crowd_ttests %>% 
-  kbl(., format = "latex", caption = "Determinants of Crowd preference", label = "fig:crowd_pref") |>
-  kable_styling() %>% 
-  save_kable(file = "output/table_determinants_crowd_pref.tex")
+  filter(str_detect(X. , "Median", negate = T)) %>% 
+  rename(" " = "X.") %>% 
+  kbl(., format = "latex", escape = T, booktabs = T, 
+      label = "stimuli_descriptives", 
+        caption = "Descriptive statistics of emotional reaction and environmental appraisals for stimuli, split by typology") %>% 
+  row_spec(seq(2, 20, 2), bold=T) %>% 
+  add_indent(seq(3, 21, 2), ) %>% 
+  footnote(number  = "Bayesian t-tests; reporting the bayes factor.") %>% 
+  save_kable(file = "output/stimuli_table1.tex", )
+
+
+```
+
+```{r}
+library(ggdist)
+
+penv <- dfenv %>% 
+  pivot_longer(Restoration : Crowdedness) %>% 
+  ggplot(aes(x = name, y = value, colour = Typology)) +
+  # geom_boxplot( position = position_dodge()) +
+  # geom_line(aes(group = name_df_keep),  alpha =.2)+
+  geom_jitter(position = position_jitterdodge(), alpha = 0.5) +
+  ggdist::stat_halfeye(position = position_dodge(), aes(fill = Typology),
+    ## custom bandwidth
+    adjust = .5,
+    ## adjust height
+    width = .6,
+    ## move geom to the right
+    justification = -.4,
+    ## remove slab interval
+    .width = 0,
+  point_colour = NA) +
+  scale_color_manual(values = c("Urban" = col_urban, "Green" = col_green)) +
+  scale_fill_manual(values = c("Urban" = col_urban, "Green" = col_green)) +
+  theme_classic() +
+  # gghalves
+  labs(y = "Rating", x = "Dimension")
+
+penv
+ggsave(penv, filename = "output/plots_envstats.jpg", width = 13, height = 13/2, dpi = 300)
 
 ```
 
@@ -585,39 +657,68 @@ crowd_ttests %>%
 library(see) # for plotting
 library(ggraph) # needs to be loaded
 
-mtcars %>% 
-  correlation(partial = TRUE) %>% 
-  plot()
-
-dfsub %>% 
+names(dfenv) <- make.names(names(dfenv))
+cor_urb <- dfenv %>% 
+  filter(Typology == "Urban") %>% 
   ungroup() %>% 
-  select(Crowd_Preference_Mean, ipip_Extroversion,
-  ipip_Agreeableness, ipip_Conscientiousness,
-  ipip_Neuroticism, ipip_Openness, ipip_Honesty ) %>% 
-  correlation(partial = TRUE) %>% 
-  # data.frame()
-  filter(p < 0.001) %>% 
+  select(Willingness.to.walk, Restoration, Interest, Valence, Excitement, Crowdedness, Scenery, Width ) %>% 
+  correlation(partial = TRUE, standardize_names = F) %>% 
+  filter(p < 0.01) %>%
   plot()
+cor_urb
 
-df %>% 
+cor_green <- dfenv %>% 
+  filter(Typology == "Green") %>% 
   ungroup() %>% 
-  select(Attractiveness, Restoration, Interest, Positivity, Excitement, Crowdedness, Scenery, Width ) %>% 
+  select(Willingness.to.walk, Restoration, Interest, Valence, Excitement, Crowdedness, Scenery, Width ) %>% 
   correlation(partial = TRUE) %>% 
   # filter(p < 0.01) %>% 
   plot()
-
+cor_green
 ```
 
+## Pics
 
 ```{r}
-library(lmerTest)
-summary(lm(Crowd_Preference_Mean ~ ipip_Extroversion +
-  ipip_Agreeableness + ipip_Conscientiousness +
-  ipip_Neuroticism + ipip_Openness + ipip_Honesty +
-  SSA_Mean + NSS + SIAS_Total_Mean + SPS_Total_Mean + Age + Sex + Current_Environment.y + Upbringing_Environment, dfsub)) %>% 
-  modelsummary()
+
+dfenv %>% 
+  ggplot(aes(Crowdedness,Beauty,  colour = Typology)) +
+  geom_jitter(alpha = 0.5, position = position_jitterdodge(jitter.height = .3, jitter.width = .3))+ 
+  geom_smooth(method = "gam" ) 
+  scale_color_manual(values = c("urban" = col_urban, "green" = col_green)) 
+
+dfenv %>% 
+  group_by(Typology) %>% 
+  arrange(Beauty) %>% 
+  slice(1:5, (n()-5): n()) %>% 
+  select(name_df_keep, Beauty)
+
+
 ```
 
+```{r}
+
+library(kableExtra)
+
+df %>% 
+  select(Restoration:Excitement) %>% 
+  datasummary(All(.) ~  (`Unique (#)` = N) + (`Missing (%)` = PercentMissing) + Mean + SD, data =., 
+              output = "latex_tabular", title = "Descriptive statistics of responses to the stimuli", 
+              label = "response_descriptives")  %>% 
+    save_kable(file = "output/response_descriptives.tex")
+  
+df %>% 
+  group_by(Participant) %>% 
+  tally() %>% 
+  mutate(n = 30 -n) %>% 
+  filter(n> 0) %>% 
+  mutate(sum(n))
+
+df %>% 
+  filter(Video_Time < 30) %>% 
+  select(videoname, Video_Time)
+
+```
 
 
 ## Session information
