@@ -1,6 +1,6 @@
 \begin{table}
 
-\caption{Non-linear mixed effects models of Perceived Crowdedness}
+\caption{\label{tab:unnamed-chunk-11}Mixed effects models of Perceived Crowdedness \label{tab:models_perceived_crowds}}
 \centering
 \begin{tabular}[t]{lcccc}
 \toprule
@@ -8,45 +8,45 @@
 \midrule
 (Intercept) & 1.641*** & 1.539*** & 1.909*** & 3.842***\\
  & {}[1.458 - 1.825] & {}[1.365 - 1.713] & {}[1.736 - 2.082] & {}[3.637 - 4.046]\\
-PC (log) & 1.835*** & 1.870*** & 1.793*** & 1.122***\\
+Ped. Counts & 1.835*** & 1.870*** & 1.793*** & 1.122***\\
  & {}[1.743 - 1.928] & {}[1.784 - 1.955] & {}[1.711 - 1.875] & {}[1.032 - 1.213]\\
 Beauty & -0.034+ &  &  & \\
  & {}[-0.072 - 0.005] &  &  & \\
-Typologygreen & -0.032 & 0.171 & -0.526*** & -1.554***\\
- & {}[-0.508 - 0.444] & {}[-0.273 - 0.616] & {}[-0.833 - -0.219] & {}[-1.969 - -1.139]\\
+Green & -0.032 & 0.171 & -0.526*** & -1.554***\\
+ & {}[-0.508 - 0.444] & {}[-0.273 - 0.616] & {}[-0.833 - -0.219] & {}[-1.969 - -1.138]\\
 Familiarity & 0.029*** & 0.027*** & 0.040*** & 0.057***\\
  & {}[0.015 - 0.044] & {}[0.012 - 0.041] & {}[0.026 - 0.054] & {}[0.044 - 0.070]\\
-PC (log) x Beauty & -0.026* &  &  & \\
+Ped. Counts:Beauty & -0.026* &  &  & \\
  & {}[-0.046 - -0.006] &  &  & \\
-log1p(mean\_pedcounts)Typologygreen & 0.623** & 0.451* & 1.052*** & 1.351***\\
+Ped. Counts:Green & 0.623** & 0.451* & 1.052*** & 1.351***\\
  & {}[0.161 - 1.085] & {}[0.031 - 0.872] & {}[0.772 - 1.332] & {}[1.007 - 1.694]\\
-BeautyTypologygreen & -0.049 &  &  & \\
+Beauty:Green & -0.049 &  &  & \\
  & {}[-0.130 - 0.033] &  &  & \\
-log1p(mean\_pedcounts)BeautyTypologygreen & -0.011 &  &  & \\
+Ped. Counts:Beauty:Green & -0.011 &  &  & \\
  & {}[-0.090 - 0.067] &  &  & \\
 Scenery &  & -0.007 &  & \\
  &  & {}[-0.044 - 0.031] &  & \\
-PC (log) x Scenery &  & -0.037*** &  & \\
+Ped. Counts:Scenery &  & -0.037*** &  & \\
  &  & {}[-0.056 - -0.018] &  & \\
-SceneryTypologygreen &  & -0.090* &  & \\
+Scenery:Green &  & -0.090* &  & \\
  &  & {}[-0.167 - -0.013] &  & \\
-log1p(mean\_pedcounts)SceneryTypologygreen &  & 0.022 &  & \\
+Ped. Counts:Scenery:Green &  & 0.022 &  & \\
  &  & {}[-0.051 - 0.095] &  & \\
 Width &  &  & -0.092*** & \\
  &  &  & {}[-0.128 - -0.057] & \\
-PC (log) x Width &  &  & -0.030** & \\
+Ped. Counts:Width &  &  & -0.030** & \\
  &  &  & {}[-0.048 - -0.012] & \\
-WidthTypologygreen &  &  & 0.036 & \\
+Width:Green &  &  & 0.036 & \\
  &  &  & {}[-0.022 - 0.095] & \\
-log1p(mean\_pedcounts)WidthTypologygreen &  &  & -0.095*** & \\
+Ped. Counts:Width:Green &  &  & -0.095*** & \\
  &  &  & {}[-0.149 - -0.041] & \\
 Structure &  &  &  & -0.433***\\
  &  &  &  & {}[-0.473 - -0.393]\\
-PC (log) x Structure &  &  &  & 0.060***\\
+Ped. Counts:Structure &  &  &  & 0.060***\\
  &  &  &  & {}[0.041 - 0.078]\\
-StructureTypologygreen &  &  &  & 0.218***\\
+Structure:Green &  &  &  & 0.218***\\
  &  &  &  & {}[0.145 - 0.291]\\
-log1p(mean\_pedcounts)StructureTypologygreen &  &  &  & -0.132***\\
+Ped. Counts:Structure:Green &  &  &  & -0.132***\\
  &  &  &  & {}[-0.195 - -0.069]\\
 \midrule
 Num.Obs. & 11168 & 11165 & 11166 & 11163\\
@@ -57,7 +57,7 @@ BIC & 35557.4 & 35517.1 & 35117.1 & 33707.8\\
 ICC & 0.2 & 0.2 & 0.2 & 0.2\\
 RMSE & 1.11 & 1.11 & 1.08 & 1.02\\
 \bottomrule
-\multicolumn{5}{l}{\rule{0pt}{1em}PC (log) : Average pedestrian count per stimulus}\\
 \multicolumn{5}{l}{\rule{0pt}{1em}+ p $<$ 0.1, * p $<$ 0.05, ** p $<$ 0.01, *** p $<$ 0.001}\\
+\multicolumn{5}{l}{\rule{0pt}{1em}Ped. Counts : Log-transformed, average pedestrian count per stimulus}\\
 \end{tabular}
 \end{table}

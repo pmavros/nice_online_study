@@ -51,3 +51,11 @@ vignettes/*.pdf
 *.jpg
 *.jpg
 *.tex
+analysis/random_effects.nb.html
+analysis/output/table_models_psych_reaction.tex
+analysis/output/table_models_perceived_crowds.tex
+analysis/output/table_models_perceived_beauty.tex
+analysis/output/plots_reg.jpg
+analysis/output/plots_corr.jpg
+analysis/figures/unnamed-chunk-6-1.png
+analysis/04_individual_differences.nb.html

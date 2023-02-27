@@ -16,7 +16,7 @@ In this script we examine individual differences in perceived crowdedness.
 We first read the pre-processed data from participants. 
 
 ```{r}
-df <- read.csv('~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv') |> 
+df <- read.csv('~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv')|> 
   mutate(Typology = fct_relevel(primary_category, "urban", "green"))
 
 length(unique(df$Participant))
@@ -29,6 +29,7 @@ plot(df$mean_pedcounts)
 Here we extract one row per participant, which contains the demographic and personality and responses to the survey. 
 
 ```{r }
+
 dfsub <- df |>
   group_by(Participant) |>
   select(Participant, Age, Sex, Language, Crowd_Preference_Mean, starts_with("ipip"), SSA_Mean, SPS_Total_Mean, SIAS_Total_Mean, NSS, Upbringing_Environment, Current_Environment.y) |>
@@ -41,6 +42,7 @@ nrow(dfsub)
 ### Determinants of Crowd preference
 
 ```{r}
+
 dfsub <- dfsub %>% 
   filter(!is.na(Crowd_Preference_Mean))
 
@@ -78,7 +80,7 @@ crowd_cortests <- crowd_cortests %>%
          BF = insight::format_bf(BF, name = NULL, exact = F, stars =  T)) %>% 
   select(Parameter, Median, `95% CI`, BF)
 
-
+crowd_cortests
 ```
 
 
@@ -134,11 +136,11 @@ Responses by preferences
 
 ```{r}
 
-fit0 <-lmer(Positivity ~ 1 + (1  | Participant), data =  df)
-fit <-lmer(Positivity ~ mean_pedcounts + Beauty + (1 + mean_pedcounts | Participant) + (1|Nationality), data =  df)
+fit0 <-lmer(Attractiveness ~ 1 + (1  | Participant), data =  df)
+fit <-lmer(Attractiveness ~ mean_pedcounts + Beauty + (1 + mean_pedcounts | Participant) + (1|Nationality), data =  df)
 anova(fit0, fit)
 anova(fit)
-report(fit)
+summary(fit)
 
 ```
 

@@ -1,19 +1,22 @@
 ---
-title: "R Notebook"
+title: "Online study cleanup"
+subtitle: "The NICE Project"
+author: "Panos Mavros"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook with the analysis of the NICE online study.
+# DEPRECATED FILE
 
-```{r}
+This is an R Markdown Notebook with the analysis of the NICE online study. To run the code below, you can open the file in [RStudio](https://posit.co/products/open-source/rstudio/).
+ 
+```{r, echo=FALSE}
 library(tidyverse)
-
 ```
 
 ### Load data
 
 ```{r}
-data <- read_csv("../5_data/nice-online-experiment-Prolific_220419.csv")
+data <- read_csv("~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/5_data/nice-online-experiment-Prolific_220419.csv")
 data
 ```
 

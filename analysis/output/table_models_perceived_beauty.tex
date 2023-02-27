@@ -1,49 +1,49 @@
 \begin{table}
 
-\caption{Non-linear mixed effects models of Perceived Beauty}
+\caption{\label{tab:unnamed-chunk-14}Non-linear mixed effects models of Perceived Beauty \label{tab:models_beauty}}
 \centering
 \begin{tabular}[t]{lcccc}
 \toprule
   & Crowdedness & Structure & Scenery & Width\\
 \midrule
 (Intercept) & 3.854*** & 4.005*** & 4.466*** & 4.070***\\
- & {}[3.757 - 3.950] & {}[3.917 - 4.092] & {}[4.419 - 4.513] & {}[3.983 - 4.158]\\
-poly(Crowdedness, 2)1 & -0.626 &  &  & \\
- & {}[-5.015 - 3.763] &  &  & \\
-poly(Crowdedness, 2)2 & -17.540*** &  &  & \\
- & {}[-20.618 - -14.462] &  &  & \\
-Typologygreen & 1.324*** & 1.079*** & 0.239*** & 1.173***\\
- & {}[1.241 - 1.406] & {}[1.001 - 1.156] & {}[0.185 - 0.293] & {}[1.103 - 1.244]\\
+ & (0.049) & (0.045) & (0.024) & (0.045)\\
+Crowdedness & -0.626 &  &  & \\
+ & (2.239) &  &  & \\
+Crowdedness<sup> 2</sup> & -17.540*** &  &  & \\
+ & (1.571) &  &  & \\
+Green & 1.324*** & 1.079*** & 0.239*** & 1.173***\\
+ & (0.042) & (0.040) & (0.028) & (0.036)\\
 Familiarity & 0.135*** & 0.113*** & 0.033*** & 0.099***\\
- & {}[0.118 - 0.151] & {}[0.098 - 0.129] & {}[0.024 - 0.042] & {}[0.084 - 0.115]\\
-poly(Crowdedness, 2)1Typologygreen & -18.819*** &  &  & \\
- & {}[-27.634 - -10.003] &  &  & \\
-poly(Crowdedness, 2)2Typologygreen & 9.929* &  &  & \\
- & {}[1.937 - 17.921] &  &  & \\
-poly(Structure, 2)1 &  & 55.761*** &  & \\
- &  & {}[51.528 - 59.994] &  & \\
-poly(Structure, 2)2 &  & 4.883** &  & \\
- &  & {}[1.857 - 7.909] &  & \\
-poly(Structure, 2)1Typologygreen &  & 1.196 &  & \\
- &  & {}[-8.326 - 10.719] &  & \\
-poly(Structure, 2)2Typologygreen &  & -3.360 &  & \\
- &  & {}[-11.701 - 4.982] &  & \\
-poly(Scenery, 2)1 &  &  & 137.553*** & \\
- &  &  & {}[135.045 - 140.061] & \\
-poly(Scenery, 2)2 &  &  & -2.184* & \\
- &  &  & {}[-4.076 - -0.291] & \\
-poly(Scenery, 2)1Typologygreen &  &  & 1.766 & \\
- &  &  & {}[-4.547 - 8.079] & \\
-poly(Scenery, 2)2Typologygreen &  &  & -4.579+ & \\
- &  &  & {}[-9.750 - 0.593] & \\
+ & (0.008) & (0.008) & (0.005) & (0.008)\\
+Crowdedness:Green & -18.819*** &  &  & \\
+ & (4.498) &  &  & \\
+Crowdedness<sup> 2</sup>:Green & 9.929* &  &  & \\
+ & (4.077) &  &  & \\
+Structure &  & 55.761*** &  & \\
+ &  & (2.160) &  & \\
+Structure<sup> 2</sup> &  & 4.883** &  & \\
+ &  & (1.544) &  & \\
+Structure:Green &  & 1.196 &  & \\
+ &  & (4.858) &  & \\
+Structure<sup> 2</sup>:Green &  & -3.360 &  & \\
+ &  & (4.256) &  & \\
+Scenery &  &  & 137.553*** & \\
+ &  &  & (1.280) & \\
+Scenery<sup> 2</sup> &  &  & -2.184* & \\
+ &  &  & (0.966) & \\
+Scenery:Green &  &  & 1.766 & \\
+ &  &  & (3.221) & \\
+Scenery<sup> 2</sup>:Green &  &  & -4.579+ & \\
+ &  &  & (2.639) & \\
 poly(Width, 2)1 &  &  &  & 60.141***\\
- &  &  &  & {}[55.617 - 64.665]\\
+ &  &  &  & (2.308)\\
 poly(Width, 2)2 &  &  &  & 5.048**\\
- &  &  &  & {}[2.041 - 8.056]\\
-poly(Width, 2)1Typologygreen &  &  &  & -17.039***\\
- &  &  &  & {}[-24.053 - -10.025]\\
-poly(Width, 2)2Typologygreen &  &  &  & 0.758\\
- &  &  &  & {}[-6.079 - 7.594]\\
+ &  &  &  & (1.534)\\
+poly(Width, 2)1:Green &  &  &  & -17.039***\\
+ &  &  &  & (3.579)\\
+poly(Width, 2)2:Green &  &  &  & 0.758\\
+ &  &  &  & (3.488)\\
 \midrule
 Num.Obs. & 11168 & 11163 & 11165 & 11166\\
 R2 Marg. & 0.135 & 0.195 & 0.686 & 0.193\\

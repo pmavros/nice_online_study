@@ -1,12 +1,58 @@
 ---
 title: "Demographics Report"
-output: html_document
-date: '2022-09-12'
+author: "Panos Mavros"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+subtitle: The NICE Project
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+This is an R Markdown Notebook with the analysis of the NICE online study. To run the code below, you can open the file in [RStudio](https://posit.co/products/open-source/rstudio/).
+
+
+## Load libraries
+```{r setup, echo=FALSE, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE)
 ```
+
+```{r, echo=TRUE}
+library(furniture) # formating table 1
+library(tidyverse) # general wranling
+```
+
+## Load data
+### Study data
+```{r}
+
+folder <-'~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/'
+
+df <- read.csv(paste0(folder, '/data/data_pruned_for_analysis_2022-09-14.csv'))
+length(unique(df$Participant))
+
+```
+
+```{r}
+
+names(df)
+
+df %>% 
+  filter()
+```
+
+
+```{r}
+demographics <- read_csv(paste0(folder, "data/demographics_merged.csv")) %>% 
+  filter(!is.na(Participant))
+
+length(unique(demographics$Participant))
+# Working/school Other (Other (e.g., unemployed, retired))
+# Age (years) 18–29 30-49 50-64 65+
+# Location of residence 	Town, village, or hamlet 	/ City
+
+
+```
+
 
 ## Participant characteristics
 
@@ -17,19 +63,9 @@ Note: "From prolific.co https://researcher-help.prolific.co/hc/en-gb/articles/36
 Starting with the youngest allowable participation age on Prolific, we stratify age using five 9-year brackets: 18-27, 28-37, 38-47, 48-57, and 58+. ‘Sex’ is stratified into male and female. ‘Ethnicity (simplified)’ is stratified into the five categories recommended by the UK Office of National Statistics: White, Mixed, Asian, Black and Other."
 
 ```{r eval=FALSE, include=FALSE}
-library(furniture)
-library(tidyverse)
-
-demographics <- read_csv("data/demographics_merged.csv") %>% 
-  filter(!is.na(Participant))
-
-length(unique(demographics$Participant))
-# Working/school Other (Other (e.g., unemployed, retired))
-# Age (years) 18–29 30-49 50-64 65+
-# Location of residence 	Town, village, or hamlet 	/ City
 
 
-df <- read.csv('data/data_pruned_for_analysis_2022-09-14.csv')
+
 
 demographics <- demographics %>% 
   filter(Participant %in% unique(df$Participant))
