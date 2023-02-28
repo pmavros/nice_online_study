@@ -1,7 +1,7 @@
 ---
-title: "NICE ONLINE STUDY"
-subtitle: "Data pruning"
-output: html_document
+title: "Data pruning"
+subtitle: "NICE Project, online study"
+output: html
 date: "`r Sys.Date()`"
 editor_options: 
   chunk_output_type: inline
@@ -25,7 +25,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Data
+## Load libraries
 
 ```{r, warning=FALSE, message=FALSE}
 library(tidyverse)
@@ -33,17 +33,35 @@ library(ggdist)
 library(ggside)
 library(easystats)
 library(patchwork)
+```
 
-df <- read.csv('data/data_preprocessed_no_demographics.csv') %>% select(-X)
+## Load data
 
-video_data <- read_csv("../../3_materials/stimuli_scripts/final_set_with_testing_groups_typology_220914.csv")
+```{r}
 
+folder
 
+df <- read.csv(paste0(folder, 'data/data_preprocessed_no_demographics.csv')) %>% select(-X)
+nrow(df)
 length(unique(df$Participant))
+```
+
+```{r, }
+video_data <- read_csv(paste0(folder,"../../3_materials/stimuli_scripts/final_set_with_testing_groups_typology_220914.csv"))
+length(unique(video_data$videoname))
 
 ```
 
-A total of `r length(unique(df$Participant))` completed the study in prolific.
+A total of `r length(unique(df$Participant))` completed the study in prolific, and watched a total of `r length(unique(df$Video))`. Many of them faced streaming issues and had low attention scores, let's develop a strategy to exlude them from analysis.
+
+### Join participant response with video metadata
+
+```{r}
+
+df <- df %>%
+    left_join(video_data, by = c("Video" = "link"))
+
+```
 
 ## Filtering based on attention metrics
 
@@ -69,7 +87,7 @@ df |>
 
 ```
 
-### Distracted in how many videos?
+### Distracted, in how many videos?
 
 Second, we should examine if these 'moments of distraction' happen randomly across participants, or if some participants are consistently **not** paying attention to the task. So we here we count in how many trials per participant distracted time is above 0. We can see that while some participants are distracted once or twice, others are distracted for 7 or even 27 out 30 video trials.
 
@@ -83,7 +101,7 @@ df |>
 
 ```
 
-## Distracted for how long?
+## Distraction duration
 
 Let's look more closely at those participants with no more than 2 distractions. How long where they? They seem to range from minimal (1 second) to severe (5 minutes or 320 seconds).
 
@@ -129,24 +147,24 @@ Based on the audit above, we concluded the following filtering strategy:
 
 df_pruned <- df |>
   group_by(Participant) |> 
-  mutate(Distracted_n = sum(Distracted_Time > 0)) |>
-  filter( Distracted_n < 3) |>
-  mutate(Distracted_Time = Distracted_Time/1000,
-         Distracted_Time= round(Distracted_Time, digits = 0)) |>
-  filter(Distracted_Time == 0)
+  mutate( Distracted_n = sum(Distracted_Time > 0)) |>
+  filter( Distracted_n < 3) |> # remove participants who were distracted at all for more than 2 videos
+  mutate( Distracted_Time = Distracted_Time/1000,
+          Distracted_Time= round(Distracted_Time, digits = 0)) |>
+  filter( Distracted_Time == 0) # keep only reponses with 0 distraction time
+
+n_distinct(df_pruned$Participant)
 
 df_pruned %>% 
   nrow()
-  
-length(unique(df_pruned$Participant))
 
 ```
 
-So after this pruning, we are left with `r length(unique(df_pruned$Participant))` participants.
+So after this pruning, we are left with `r n_distinct(df_pruned$Participant)` participants.
 
 ## Response variance
 
-A second concernt we have is if participants responsonded intentionally, or just 'clicked-away'... We will assess this by looking at the variance per response item, as well as the deviation from the average.
+A second concern we have is if participants responded intentionally, or just 'clicked-away'... We will assess this by looking at the variance per response item, as well as the deviation from the average.
 
 ```{r}
 
@@ -177,7 +195,7 @@ df_pruned |>
 
 ```
 
-Here we see that 2 participants specifcally, have consistently low variance in their responses. We will interepret this as being a sign of low-effort and we will remove them.
+Here we see that 3 participants specifcally, have consistently low variance in their responses. We will interepret this as being a sign of low-effort and we will remove them.
 
 ```{r}
 
@@ -195,22 +213,12 @@ low_effort_ids
 
 ```
 
-## 
-
-```{r}
-df %>% 
-  filter(! Participant %in% unique(df_pruned$Participant)) %>% 
-  group_by(Participant) %>% slice(1) %>% 
-  select(Lives_now)
-```
-
-## Video buffering - Pending
+## Video buffering
 
 We should also remove participant that had severe video streaming problems as this might have influenced their attention and/or appraisals.
 
 ```{r}
-df_pruned |>
-  left_join(video_data, by = c("Video" = "link")) |>
+df_pruned  %>% 
   ungroup() %>% 
   filter(Video_Time > 30) %>% 
   mutate(duration = if_else(duration > 30, 30, duration)) %>% 
@@ -244,7 +252,7 @@ df_pruned %>%
   
 ```
 
-## Final set
+## Exclude low-effort (i.e. low response stdev)
 
 Finally, we decided to keep videos where excess time (buffering) was less than 2/3 of the video duration, i.e. no more than 20 seconds. This leads to a total of 50 seconds for the whole video duration.
 
@@ -253,21 +261,50 @@ previous_video_count = nrow(df)
 
 df_pruned <- df_pruned |>
   filter(! Participant %in% low_effort_ids)
+```
 
+We define as buffering time. the excess time of each trial, in addition to the duration of the video, in other words time that is attributed to loading the video to the participant's browser.
 
+$$
+(1)~ video~duration + buffering = video~time
+$$
+$$
+(2)~ buffering = video~time - video~duration
+$$
+
+Now we will exclude videos:
+
+1.  Where the buffering time exceeds the video duration.
+2.  Where the video playback is less than the duration of the video (this would indicate that for some reason the trial was skipped accidentally for some reason.
+
+```{r}
+
+df_pruned <- df_pruned |>
+  mutate(duration = if_else(duration > 30, 30, duration),
+         Buffering = Video_Time - duration) |>
+  filter(Buffering < duration,
+         duration < Video_Time) 
+
+n_distinct( df_pruned$Participant )
 
 ```
 
-```{r}
-df_pruned <- df_pruned |>
-  left_join(video_data, by = c("Video" = "link")) |>
-  mutate(duration = if_else(duration > 30, 30, duration),
-         Buffering = Video_Time - duration) |>
-  filter(Buffering < duration)
+One last step, if we have too few trials from a participant, we should also exclude their responses. We create a summary table, showing how many trials we have per participant. We see that 310 participants have full sets (30 trials), but 10 participants have 14 or less trials left after removing videos with streaming issues.
 
+```{r}
+df_pruned %>% 
+   group_by(Participant) %>% 
+  tally() %>% 
+  arrange(n) %>% pull(n) %>% table(.)
+```
+
+We keep data from participants with 15 or more valid trials.
+
+```{r}
 ids_to_keep <- df_pruned %>% 
   group_by(Participant) %>% 
-  tally() %>% arrange(n) %>% 
+  tally() %>% 
+  arrange(n) %>% 
   filter(n >=15) %>%  
   pull(Participant)
 
@@ -275,9 +312,6 @@ length(ids_to_keep)
 
 df_pruned <- df_pruned |>
   filter(Participant %in% ids_to_keep)
-
-paste(previous_video_count - nrow(df_pruned) )
-
 ```
 
 With this step we dropped `r nrow(df_pruned) - previous_video_count` videos.
@@ -287,7 +321,6 @@ Following these filtering steps, we now have retained `r n_distinct( df_pruned$P
 ```{r}
 
 df_pruned %>%   
-  filter(Video_Time >= 30) %>% 
   nrow()
 
 ```
@@ -305,28 +338,34 @@ length(unique(df_pruned$Participant)) # original completed participants
 
 ```{r}
 df_pruned %>%   
-  # filter(Video_Time > 30) %>% 
   group_by(Video) %>% 
   tally(name = "n_per_video") %>% 
   arrange(n_per_video) %>% 
   ungroup() %>% 
-  summarise(av_n_per_video = mean(n_per_video), sd = sd(n_per_video), range = paste(range(n_per_video), collapse = "-"))
-
-# av_Time = mean(Video_Time), sd_Time = sd(Video_Time), range_Time = paste(range(Video_Time), collapse = "-"))
-
+  summarise(av_n_per_video = mean(n_per_video), 
+            sd = sd(n_per_video), 
+            range = paste(range(n_per_video), collapse = "-"))
 ```
 
 ## cleanup
 
+Keep columns we will use later. 
+
 ```{r}
-# df_pruned <- df_pruned %>% 
-#   select(Video, Participant, Age, Restoration, Presence, Attractiveness, Beauty, Structure, Interest, Familiarity, Scenery, Crowdedness, rea, Positivity, Excitement, Video_Time, Distracted_Time, SSA_Mean, Concern_Covid_Mean, SIAS_Total_Mean, SPS_Total_Mean, ipip_Extroversion, ipip_Agreeableness, ipip_Conscientiousness, ipip_Neuroticism, ipip_Openness, ipip_Honesty, Crowd_Preference_Mean, Total_Time_Elapsed, Distracted_n, video_name = name_df_keep, duration,Buffering, n_frames, width, testing_group, primary_category, secondary_category, City, Country, mean, sum )
+
+names(df_pruned)
+
+df_pruned <- df_pruned %>%
+  select(Video, Participant, Age, Restoration, Presence, Willingness_to_walk = Attractiveness, Beauty, Structure, Interest, Familiarity, Scenicness = Scenery, Crowdedness, Positivity, Excitement, 
+         Video_Time, Distracted_Time, Total_Time_Elapsed, Distracted_n, video_name = name_df_keep, duration, Buffering, n_frames, width, testing_group, primary_category, secondary_category, video_city = City, video_country = Country, mean_pedcounts = mean, sum_pedcounts = sum,  
+         SSA_Mean, Concern_Covid_Mean, SIAS_Total_Mean, SPS_Total_Mean, ipip_Extroversion, ipip_Agreeableness, ipip_Conscientiousness, ipip_Neuroticism, ipip_Openness, ipip_Honesty, Crowd_Preference_Mean,  )
 ```
 
-\## ADD demographic data
+## Add demographic data
 
 ```{r}
-demographics <- read_csv("data/demographics_merged.csv") 
+demographics <- read_csv(paste0(folder, "data/demographics_merged.csv")) 
+
 demographics <- demographics %>% 
   filter(!is.na(Participant)) %>% 
   mutate(
@@ -342,12 +381,14 @@ demographics <- demographics %>%
 demographics <- demographics %>% 
   select(Participant, Sex, Age, Language, ArtsBg, ArchBg, Lives_now, years_Lives_now, urban_rural_background, urban_rural_now,  Language, Employment_status, Nationality, Approval_rate, Ethnicity, Student_status, Employment, Age_breaks, Education, Upbringing_Environment, Current_Environment)
 
-  length(unique(demographics$Participant))
+length(unique(demographics$Participant))
   
   
 df_pruned <- df_pruned %>% 
   left_join(demographics %>% select(-Age), by = "Participant") %>% 
   ungroup()
+
+n_distinct(df_pruned$Participant)
 
 skimr::skim(df_pruned)
 ```

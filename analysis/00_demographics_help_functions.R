@@ -1,3 +1,10 @@
+## Preparing Demographic data ##
+##
+## in prolific, demographic data are provided, in anonymised form, by the platform,
+## so we can streamline the questions we ask in our survey.
+## in this script, we collate data from the various data collection runs, clean-up it up and export a single fle.
+
+
 files <- list.files("../../5_data/1_Online_study/Demographic Data/", pattern = ".csv", recursive = TRUE, full.names = T)
 
 files <- files[str_detect(files, pattern = "prolific_export")]

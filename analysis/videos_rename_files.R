@@ -1,4 +1,5 @@
-
+# Script to clean-up names of videos
+# Some of the videos we used include special characters in their filename
 
 
 
