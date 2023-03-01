@@ -1,7 +1,7 @@
 ---
 title: "NICE Online"
 output: 
-  html_document:
+  html_notebook:
     toc: true
     toc_float: true
     toc_collapsed: true
@@ -44,13 +44,20 @@ library(ggside) # plot distributions on the plot margins
 library(easystats) # estimate and process statistical models
 library(patchwork) # combine multiple plots
 library(modelsummary) # for tables
+options("modelsummary_format_numeric_latex" = "plain")
+
+library(see) # for plotting
+library(ggraph) # needs to be loaded
+library(ggdist) # plotting distributions
+library(kableExtra) # export tables to latex
+library(correlation) # easy correlation
 
 ```
-
 
 ## Reusable functions
 ### Plot distributions
 ```{r fig.height=fig.height*2, message=FALSE, warning=FALSE, cache=FALSE}
+
 plot_distributions <- function(df, col) {
   p1 <- df[c("Participant", col)] |>
     group_by(Participant) |>
@@ -96,34 +103,59 @@ plot_distributions <- function(df, col) {
 }
 ```
 
-# Analysis
+
+
 ## Load data
 
-```{r message=FALSE, warning=FALSE}
-# path <-
-  # df <- read.csv("C:/Dropbox/RECHERCHE/Projects/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv") |>
-df <- read.csv("~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv") |>
-  mutate(
-    Typology = fct_relevel(primary_category, "urban", "green"),
-    Positivity = datawizard::rescale(Positivity, to = c(1, 7), range = c(1, 9)),
-    Excitement = datawizard::rescale(Excitement, to = c(1, 7), range = c(1, 9))
-  )
-
-# remove 2 participants that have 30 and 21 trials with video playback < video duration; 
-# remove 1 trial from another participant with the same issue (but keep remaining trials).
-
-df <- df %>% 
-  filter(Buffering > 0, !(Participant %in% c("5fbb7aae04da87a3fe5f129c", "5d0cd09edff7d70019e6e045")))
-
-df %>% 
-   group_by(Participant) %>% tally() %>% arrange(n) %>% pull(n) %>% range(.)
-
-df %>% 
-   group_by(Video) %>% tally() %>% arrange(n) %>% summarise(mean(n), range(n), sd(n))
+```{r}
+folder <- rstudioapi::selectDirectory(
+  caption = "Select Directory",
+  label = "Select"
+)
 
 ```
 
+```{r message=FALSE, warning=FALSE}
 
+
+df <- read.csv(paste0(folder, '/9_analysis/Online Study/data/data_pruned_for_analysis_2023-03-01.csv')) %>% 
+  mutate(
+    Typology = fct_relevel(video_primary_category, "urban", "green"),
+    Valence = datawizard::rescale(Valence, to = c(1, 7), range = c(1, 9)),
+    Arousal = datawizard::rescale(Arousal, to = c(1, 7), range = c(1, 9))
+  ) %>% 
+  rename("Participant" = Anon_ID )
+
+length(unique(df$Participant))
+```
+
+# Analysis
+
+
+```{r}
+video_summary <- df %>% 
+   group_by(Video) %>% 
+  tally() %>% 
+  arrange(n)  %>% 
+  summarise(m = mean(n), s = sd(n), r = paste( range(n), collapse = " - "))
+
+
+
+```
+
+Each video was seen `r video_summary$m` times on average (SD = `r video_summary$s`, range = `r video_summary$r`).
+
+## Summary data per video (stimulus)
+
+```{r}
+dfenv <- df %>% 
+  group_by(video_name_df_keep, Typology) %>% 
+  summarise_at(.vars = c( "Restoration", "WillingnessToWalk","Presence", "Width", "Structure", "Beauty","Interest", "Scenic", "Familiarity",  "Valence","Arousal", "Crowdedness" ), .funs = function(x) mean(x, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(Typology = recode_factor(Typology, "urban" = "Urban", "green" = "Green" )) %>% 
+  rename(`Willingness to walk` = WillingnessToWalk)
+
+```
 
 
 ## Participant
@@ -132,10 +164,10 @@ Here we only provide an overview to confirm we have loaded the correct amount of
 ```{r }
 dfsub <- df |>
   group_by(Participant) |>
-  select(Participant, Age, Sex, Language, Crowd_Preference_Mean, starts_with("ipip"), SSA_Mean, SPS_Total_Mean, SIAS_Total_Mean, NSS, Upbringing_Environment, Current_Environment.y) |>
+  select(Participant, Age, Sex, Language, Crowd_Preference_Mean, starts_with("ipip"), SSA_Mean, SPS_Total_Mean, SIAS_Total_Mean, NSS, Upbringing_Environment, Current_Environment) |>
   slice(1)
 
-nrow(dfsub)
+nrow(dfsub) # should be 377
 ```
 
 A total of `r report::report_participants(dfsub, age="Age")` participants were included for analysis.
@@ -156,14 +188,25 @@ A total of `r report::report_participants(dfsub, age="Age")` participants were i
     theme_modern())
 ```
 
+## Descriptives of rerponses
+```{r}
+
+
+df %>% 
+  select(Restoration:Arousal) %>% 
+  datasummary(All(.) ~  (`Unique (#)` = N) + (`Missing (%)` = PercentMissing) + Mean + SD, data =., 
+              output = "latex_tabular", title = "Descriptive statistics of responses to the stimuli", 
+              label = "response_descriptives")  %>% 
+    save_kable(file = "output/response_descriptives.tex")
+```
+
 # Correlation plot
 ```{r}
-library(see)
-library(correlation)
+
 
 p_corrplot_u <- dfenv %>% 
   filter(Typology == "Urban") %>% 
-  select(WLW = Willingness.to.walk, Crowdedness, Valence, Excitement, Restoration, Presence, Beauty, Interest, Structure, Width) %>%
+  select(WLW = `Willingness to walk`, Crowdedness, Valence, Arousal, Restoration, Presence, Beauty, Interest, Structure, Width) %>%
   correlation(., bayesian = T) %>% 
   summary(redundant = FALSE) %>%
   plot() + scale_x_discrete(position = "top") + labs(title = "Urban spaces") +
@@ -171,18 +214,62 @@ p_corrplot_u <- dfenv %>%
 
 p_corrplot_g <- dfenv %>% 
   filter(Typology == "Green") %>% 
-  select(WLW = Willingness.to.walk, Crowdedness, Valence, Excitement, Restoration, Presence, Beauty, Interest, Structure, Width) %>%
+  select(WLW = `Willingness to walk`, Crowdedness, Valence, Arousal, Restoration, Presence, Beauty, Interest, Structure, Width) %>%
   correlation(., bayesian = T) %>% 
   summary(redundant = FALSE) %>% 
   plot() + scale_x_discrete(position = "top") + labs(title = "Green spaces") +
   theme_modern()
 
-p_corrplot_g
-
-
 p_corr <- p_corrplot_u / p_corrplot_g + plot_annotation(title = "Correlation Matrix")
+p_corr
+
 ggsave(p_corr, filename = "output/plots_corr.jpg", width = 13, height = 7, dpi = 300)
 
+```
+
+## The environments
+
+
+```{r}
+t1 %>% 
+  data.frame() %>% 
+  filter(str_detect(X. , "Median", negate = T)) %>% 
+  rename(" " = "X.") %>% 
+  kbl(., format = "latex", escape = T, booktabs = T, 
+      label = "stimuli_descriptives", 
+        caption = "Descriptive statistics of emotional reaction and environmental appraisals for stimuli, split by typology") %>% 
+  row_spec(seq(2, 20, 2), bold=T) %>% 
+  add_indent(seq(3, 21, 2), ) %>% 
+  footnote(number  = "Bayesian t-tests; BF = bayes factor.") %>% 
+  save_kable(file = "output/stimuli_table1.tex" )
+```
+
+```{r}
+
+penv <- dfenv %>% 
+  pivot_longer(Restoration : Crowdedness) %>% 
+  ggplot(aes(x = name, y = value, colour = Typology)) +
+  # geom_boxplot( position = position_dodge()) +
+  # geom_line(aes(group = name_df_keep),  alpha =.2)+
+  geom_jitter(position = position_jitterdodge(), alpha = 0.5) +
+  ggdist::stat_halfeye(position = position_dodge(), aes(fill = Typology),
+    ## custom bandwidth
+    adjust = .5,
+    ## adjust height
+    width = .6,
+    ## move geom to the right
+    justification = -.4,
+    ## remove slab interval
+    .width = 0,
+  point_colour = NA) +
+  scale_color_manual(values = c("Urban" = col_urban, "Green" = col_green)) +
+  scale_fill_manual(values = c("Urban" = col_urban, "Green" = col_green)) +
+  theme_classic() +
+  # gghalves
+  labs(y = "Rating", x = "Dimension")
+
+penv
+ggsave(penv, filename = "output/plots_envstats.jpg", width = 13, height = 13/2, dpi = 300)
 
 ```
 
@@ -190,20 +277,21 @@ ggsave(p_corr, filename = "output/plots_corr.jpg", width = 13, height = 7, dpi =
 
 ### Variable Distribution
 
-```{r eval=FALSE, fig.height=fig.width*1.5, message=FALSE, warning=FALSE, cache=FALSE, include=FALSE}
+```{r eval=TRUE, fig.height=fig.width*1.5, message=FALSE, warning=FALSE, cache=FALSE, include=FALSE}
+
 p <- (plot_distributions(df, "Crowdedness") |
   plot_distributions(df, "Beauty")) /
   (plot_distributions(df, "Restoration") |
     plot_distributions(df, "Presence")) /
-  (plot_distributions(df, "Attractiveness") |
+  (plot_distributions(df, "WillingnessToWalk") |
     plot_distributions(df, "Structure")) /
-  (plot_distributions(df, "Scenery") |
+  (plot_distributions(df, "Scenic") |
     plot_distributions(df, "Interest")) /
   (plot_distributions(df, "Width") |
     plot_distributions(df, "Familiarity")) /
-  (plot_distributions(df, "Positivity") |
-    plot_distributions(df, "Excitement"))
-# p
+  (plot_distributions(df, "Valence") |
+    plot_distributions(df, "Arousal"))
+p
 # ggsave("figures/interindividualstimuli_variability.png", p, height=fig.width*1.5, width=fig.width, limitsize = FALSE, dpi=300)
 ```
 
@@ -211,38 +299,29 @@ p <- (plot_distributions(df, "Crowdedness") |
 
 ### Models
 ```{r}
-rm(preds, params, mods, vars)
+try(rm(preds, params, mods, vars), silent = T) # remove objects from previous runs, to be safe.
 preds <- data.frame()
 params <- data.frame()
 mods <- list()
 outcome_var <- "Crowdedness"
-vars <- c("Beauty", "Scenery","Width", "Structure") # replaced familiarity with Beauty
+vars <- c("Beauty", "Scenic","Width", "Structure") # replaced familiarity with Beauty
 i=1
 for (i in 1:length(vars)) {
   var <- vars[i]
   print(var)
 
-  f <- paste0(outcome_var, " ~ log1p(mean_pedcounts) * ", var, " * Typology + Familiarity  + (", var, "|Participant)")
+  f <- paste0(outcome_var, " ~ log1p(video_mean_pedcounts) * ", var, " * Typology + Familiarity  + (", var, "|Participant) + (1|Video)")
 
   model <- glmmTMB::glmmTMB(as.formula(f), data = df)
   mods[[i]] <- model
-  # Individual-level correlations
-  # dfsub <- modelbased::estimate_grouplevel(model) |>
-  #   modelbased::reshape_grouplevel() |>
-  #   select(c(1, 3)) |>
-  #   group_by(Participant) |>
-  #   slice(1) |>
-  #   datawizard::data_rename(pattern = paste0("Participant_Coefficient_", var),
-  #               paste0(outcome_var, "_", var), regex = TRUE) |>
-  #   merge(dfsub, by = "Participant")
-
+  
   # Parameters
   param <- parameters::parameters(model, effects = "fixed")
   param$Variable <- var
   params <- rbind(params, param)
 
   # Predicted
-  pred <- estimate_relation(model, at = c("mean_pedcounts", var, "Typology"), length = c(50, 7))
+  pred <- estimate_relation(model, at = c("video_mean_pedcounts", var, "Typology"), length = c(50, 7))
   names(pred)[names(pred) == var] <- "Value"
   pred$Variable <- var
   pred$Label <- paste0("Main effect: ", format_p(param$p[3]), "\nInteraction: ", format_p(param$p[4]))
@@ -257,7 +336,7 @@ rm(p_crowd)
 p_crowd <- preds |>
   filter(Predicted < 7) |>
   mutate(Value = as.factor(Value)) |>
-  ggplot(aes(x = mean_pedcounts, y = Predicted)) +
+  ggplot(aes(x = video_mean_pedcounts, y = Predicted)) +
   stat_density_2d(data = df, aes(y = Crowdedness, fill = ..density..), geom = "raster", contour = FALSE) +
   geom_line(aes(color = Typology, size = Value, group = interaction(Typology, Value))) +
   scale_fill_gradientn(colours = c("white", "grey"), guide = "none") +
@@ -292,11 +371,14 @@ p_crowd
 ### tables
 
 ```{r}
-# @PANOS: didn't touch that, need to re-adjust based on the new model
-options("modelsummary_format_numeric_latex" = "plain")
 
 names(mods) <- vars
-modelsummary(mods, escape = FALSE,
+
+# to plot in the html version
+modelsummary(mods, stars = TRUE) 
+
+# export to latex
+modelsummary(mods, escape = FALSE, 
   stars = TRUE, statistic = "[{conf.low} - {conf.high}]",
   coef_omit = "SD|Cor", 
   coef_rename = c(
@@ -306,15 +388,15 @@ modelsummary(mods, escape = FALSE,
     "StructureTypologygreen" = "Structure x Green",
     "BeautyTypologygreen" = "Beauty x Green",
     "WidthTypologygreen" = "Width x Green",
-    "SceneryTypologygreen" = "Scenery x Green",
+    "ScenicTypologygreen" = "Scenic x Green",
     
     "log1p(mean_pedcounts)Typologygreen"= "Ped. Counts x Green",
     "log1p(mean_pedcounts)Beauty" = "Ped. Counts x Beauty",
-    "log1p(mean_pedcounts)Scenery" = "Ped. Counts x Scenery",
+    "log1p(mean_pedcounts)Scenic" = "Ped. Counts x Scenic",
     "log1p(mean_pedcounts)Width" = "Ped. Counts x Width",
     "log1p(mean_pedcounts)Structure" = "Ped. Counts x Structure",
 
-    "log1p(mean_pedcounts)SceneryTypologygreen" = "Ped. Counts x Scenery x Green",
+    "log1p(mean_pedcounts)ScenicTypologygreen" = "Ped. Counts x Scenic x Green",
     "log1p(mean_pedcounts)WidthTypologygreen" = "Ped. Counts x Width x Green",
     "log1p(mean_pedcounts)StructureTypologygreen" = "Ped. Counts x Structure x Green",
     "log1p(mean_pedcounts)BeautyTypologygreen" = "Ped. Counts x Beauty x Green"
@@ -332,7 +414,7 @@ rm(preds, mods, vars)
 preds <- data.frame()
 dat <- data.frame()
 mods <- list()
-vars <- c("Crowdedness", "Structure", "Scenery", "Width") #  "Interest",
+vars <- c("Crowdedness", "Structure", "Scenic", "Width") #  "Interest",
 
 for (i in 1:length(vars)) {
   var <- vars[i]
@@ -341,6 +423,7 @@ for (i in 1:length(vars)) {
   f <- paste0("Beauty ~ poly(", var, ", 2) * Typology + Familiarity + (", var, "|Participant)")
 
   model <- glmmTMB::glmmTMB(as.formula(f), data = na.omit(df[c(var, "Beauty", "Typology", "Familiarity", "Participant")]))
+  
   mods[[i]] <- model
   # Individual-level correlations
   # dfsub <- modelbased::estimate_grouplevel(model) |>
@@ -423,11 +506,11 @@ modelsummary(mods, escape = FALSE,
                   "poly(Structure, 2)1Typologygreen" = "Structure x Green",
                   "poly(Structure, 2)2Typologygreen" = "Structure<sup> 2</sup> x Green",
                   
-                  "poly(Scenery, 2)1" = "Scenery",
-                  "poly(Scenery, 2)2" = "Scenery<sup> 2</sup>",
+                  "poly(Scenic, 2)1" = "Scenic",
+                  "poly(Scenic, 2)2" = "Scenic<sup> 2</sup>",
                   
-                  "poly(Scenery, 2)1Typologygreen" = "Scenery x Green",
-                  "poly(Scenery, 2)2Typologygreen" = "Scenery<sup> 2</sup> x Green",
+                  "poly(Scenic, 2)1Typologygreen" = "Scenic x Green",
+                  "poly(Scenic, 2)2Typologygreen" = "Scenic<sup> 2</sup> x Green",
                   
                   "poly(Width, 2)1Typologygreen" = "Width x Green",
                   "poly(Width, 2)2Typologygreen" = "Width<sup> 2</sup> x Green"
@@ -450,14 +533,14 @@ dat <- data.frame()
 
 
 mods <- list()
-outcome_vars <- c("Attractiveness", "Positivity", "Excitement", "Restoration",  "Presence")
+outcome_vars <- c("WillingnessToWalk", "Valence", "Arousal", "Restoration",  "Presence")
 
 for (i in 1:length(outcome_vars)) {
   resp <- outcome_vars[i]
   print(resp)
 
   f <- paste(resp, " ~ Typology / (poly(Crowdedness, 2) * Beauty) + Familiarity + (1|Participant) + (1|Video)")
-
+  f
   model <- glmmTMB::glmmTMB(as.formula(f), data = na.omit(df[c(resp, "Beauty", "Typology", "Crowdedness", "Familiarity", "Participant", "Video")]))
   mods[[i]] <- model
   param <- parameters::parameters(model, effects = "fixed")
@@ -473,16 +556,16 @@ for (i in 1:length(outcome_vars)) {
     data.frame(
       Typology = df$Typology,
       Crowdedness = df$Crowdedness,
-      mean_pedcounts = df$mean_pedcounts,
+      video_mean_pedcounts = df$video_mean_pedcounts,
       Predicted = df[[resp]],
       Outcome = resp
     )
   )
 
   # Random (simplified model)
-  f <- paste(resp, " ~ mean_pedcounts + Beauty + (mean_pedcounts + Beauty |Participant)")
-  model <- glmmTMB::glmmTMB(as.formula(f), data = df)
-  # dfsub <- modelbased::estimate_grouplevel(model) |>
+  # f <- paste(resp, " ~ mean_pedcounts + Beauty + (mean_pedcounts + Beauty |Participant)")
+  # model <- glmmTMB::glmmTMB(as.formula(f), data = df)
+  # # dfsub <- modelbased::estimate_grouplevel(model) |>
   #   modelbased::reshape_grouplevel(indices = "Coefficient") |>
   #   select(c(1, 3, 4)) |>
   #   group_by(Participant) |>
@@ -493,19 +576,19 @@ for (i in 1:length(outcome_vars)) {
 
 
 
-names(mods) <- c("Willingness to Walk", "Positivity", "Excitement", "Restoration",  "Presence")
+names(mods) <- c("Willingness to Walk", "Valence", "Arousal", "Restoration",  "Presence")
 ```
 
 ### plots psych
 ```{r, warning=FALSE, message=FALSE}
 
-dat$Outcome <- recode(dat$Outcome, "Attractiveness"="Willing.-to-walk")
+dat$Outcome <- recode(dat$Outcome, "WillingnessToWalk"="Willing.-to-walk")
 
 p_psych <- preds |>
   dplyr::filter(Predicted <= 7) |>
   mutate(Beauty = fct_rev(as.factor(Beauty)),
-         Outcome = recode_factor(Outcome, "Attractiveness"="Willing.-to-walk"),
-         Outcome = fct_relevel(Outcome, c("Willing.-to-walk", "Positivity", "Excitement", "Restoration", "Interest", "Presence"))) |>
+         Outcome = recode_factor(Outcome, "WillingnessToWalk"="Willing.-to-walk"),
+         Outcome = fct_relevel(Outcome, c("Willing.-to-walk", "Valence", "Arousal", "Restoration", "Interest", "Presence"))) |>
   ggplot(aes(x = Crowdedness, y = Predicted)) +
   stat_density_2d(data = dat, aes(fill = ..density..), geom = "raster", contour = FALSE) +
   geom_line(aes(size = Beauty, color = Typology, group = interaction(Beauty, Typology))) +
@@ -537,9 +620,11 @@ p_psych
 
 ### Table output
 ```{r}
+
 modelsummary(mods, stars = TRUE)
+
 modelsummary(mods,
-  stars = TRUE, statistic = "[{conf.low} - {conf.high}]", escape = FALSE,
+  stars = TRUE, statistic = "[{conf.low} - {conf.high}]", escape = T,
   coef_omit = "SD|Cor", 
   coef_rename = c("Typologygreen"="Green",
                   "Familiarity"  = "Familiarity",
@@ -555,9 +640,10 @@ modelsummary(mods,
                   "Typologygreenpoly(Crowdedness, 2)2Beauty" = "Green * Crowdedness<sup> 2</sup> * Beauty"
                   ),
   title = "Non-linear mixed effects models of psychological reaction\\label{tab:models_reaction}",
-  # notes = "PC (log) : Average pedestrian count per stimulus" ,
+  notes = "PC (log) : Average pedestrian count per stimulus" ,
   output = "output/table_models_psych_reaction.tex"
 )
+
 ```
 ## joint plots
 ```{r}
@@ -567,18 +653,6 @@ p_reg <- ((p_crowd + guides(fill = "none", color = "none") | p_beauty + theme(le
 p_reg
 
 ggsave(p_reg, filename = "output/plots_reg.jpg", width = 13, height = 13, dpi = 300)
-```
-
-
-```{r}
-dfenv <- df %>% 
-  group_by(name_df_keep, Typology) %>% 
-  summarise_at(.vars = c( "Restoration", "Attractiveness","Presence", "Width", "Structure", "Beauty","Interest", "Scenery", "Familiarity",  "Positivity","Excitement", "Crowdedness" ), .funs = function(x) mean(x, na.rm = T)) %>% 
-  ungroup() %>% 
-  mutate(Typology = recode_factor(Typology, "urban" = "Urban", "green" = "Green" )) %>% 
-  rename(`Willingness to walk` = Attractiveness, 
-         Valence = Positivity)
-
 ```
 
 
@@ -605,63 +679,19 @@ pvalue <- function(x, ...) {
 
 
 ```{r}
-t1 <- table1::table1(~ Valence + Excitement + Restoration + Beauty + `Willingness to walk` + Interest + Familiarity + Structure + Presence  + Crowdedness  | Typology, overall = F,
+t1 <- table1::table1(~ Valence + Arousal + Restoration + Beauty + `Willingness to walk` + Interest + Familiarity + Structure + Presence  + Crowdedness  | Typology, overall = F,
     data=dfenv, extra.col=list(`BF`=pvalue))
-
-t1 %>% 
-  data.frame() %>% 
-  filter(str_detect(X. , "Median", negate = T)) %>% 
-  rename(" " = "X.") %>% 
-  kbl(., format = "latex", escape = T, booktabs = T, 
-      label = "stimuli_descriptives", 
-        caption = "Descriptive statistics of emotional reaction and environmental appraisals for stimuli, split by typology") %>% 
-  row_spec(seq(2, 20, 2), bold=T) %>% 
-  add_indent(seq(3, 21, 2), ) %>% 
-  footnote(number  = "Bayesian t-tests; reporting the bayes factor.") %>% 
-  save_kable(file = "output/stimuli_table1.tex", )
-
-
+t1
 ```
 
 ```{r}
-library(ggdist)
 
-penv <- dfenv %>% 
-  pivot_longer(Restoration : Crowdedness) %>% 
-  ggplot(aes(x = name, y = value, colour = Typology)) +
-  # geom_boxplot( position = position_dodge()) +
-  # geom_line(aes(group = name_df_keep),  alpha =.2)+
-  geom_jitter(position = position_jitterdodge(), alpha = 0.5) +
-  ggdist::stat_halfeye(position = position_dodge(), aes(fill = Typology),
-    ## custom bandwidth
-    adjust = .5,
-    ## adjust height
-    width = .6,
-    ## move geom to the right
-    justification = -.4,
-    ## remove slab interval
-    .width = 0,
-  point_colour = NA) +
-  scale_color_manual(values = c("Urban" = col_urban, "Green" = col_green)) +
-  scale_fill_manual(values = c("Urban" = col_urban, "Green" = col_green)) +
-  theme_classic() +
-  # gghalves
-  labs(y = "Rating", x = "Dimension")
-
-penv
-ggsave(penv, filename = "output/plots_envstats.jpg", width = 13, height = 13/2, dpi = 300)
-
-```
-
-```{r}
-library(see) # for plotting
-library(ggraph) # needs to be loaded
 
 names(dfenv) <- make.names(names(dfenv))
 cor_urb <- dfenv %>% 
   filter(Typology == "Urban") %>% 
   ungroup() %>% 
-  select(Willingness.to.walk, Restoration, Interest, Valence, Excitement, Crowdedness, Scenery, Width ) %>% 
+  select(Willingness.to.walk, Restoration, Interest, Valence, Arousal, Crowdedness, Scenic, Width ) %>% 
   correlation(partial = TRUE, standardize_names = F) %>% 
   filter(p < 0.01) %>%
   plot()
@@ -670,7 +700,7 @@ cor_urb
 cor_green <- dfenv %>% 
   filter(Typology == "Green") %>% 
   ungroup() %>% 
-  select(Willingness.to.walk, Restoration, Interest, Valence, Excitement, Crowdedness, Scenery, Width ) %>% 
+  select(Willingness.to.walk, Restoration, Interest, Valence, Arousal, Crowdedness, Scenic, Width ) %>% 
   correlation(partial = TRUE) %>% 
   # filter(p < 0.01) %>% 
   plot()
@@ -691,34 +721,11 @@ dfenv %>%
   group_by(Typology) %>% 
   arrange(Beauty) %>% 
   slice(1:5, (n()-5): n()) %>% 
-  select(name_df_keep, Beauty)
+  select(video_name_df_keep, Beauty)
 
 
 ```
 
-```{r}
-
-library(kableExtra)
-
-df %>% 
-  select(Restoration:Excitement) %>% 
-  datasummary(All(.) ~  (`Unique (#)` = N) + (`Missing (%)` = PercentMissing) + Mean + SD, data =., 
-              output = "latex_tabular", title = "Descriptive statistics of responses to the stimuli", 
-              label = "response_descriptives")  %>% 
-    save_kable(file = "output/response_descriptives.tex")
-  
-df %>% 
-  group_by(Participant) %>% 
-  tally() %>% 
-  mutate(n = 30 -n) %>% 
-  filter(n> 0) %>% 
-  mutate(sum(n))
-
-df %>% 
-  filter(Video_Time < 30) %>% 
-  select(videoname, Video_Time)
-
-```
 
 
 ## Session information

@@ -1,59 +1,87 @@
 ---
-title: "Online Study: Individual differences"
-output: html_notebook
+title: 'Online Study: Individual differences'
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: lumen
 ---
 
 ```{r message=FALSE}
+
 library(tidyverse)
 library(lmerTest)
 library(correlation)
 library(datawizard)
 library(report)
+
 ```
 
 In this script we examine individual differences in perceived crowdedness. 
 
 We first read the pre-processed data from participants. 
 
+## Load data
+
 ```{r}
-df <- read.csv('~/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2022-09-14.csv')|> 
-  mutate(Typology = fct_relevel(primary_category, "urban", "green"))
+folder <- rstudioapi::selectDirectory(
+  caption = "Select Directory",
+  label = "Select"
+)
 
-length(unique(df$Participant))
-
-df
-plot(df$mean_pedcounts)
 ```
+
+```{r message=FALSE, warning=FALSE}
+
+
+df <- read.csv(paste0(folder, '/9_analysis/Online Study/data/data_pruned_for_analysis_2023-03-01.csv')) %>% 
+  mutate(
+    Typology = fct_relevel(video_primary_category, "urban", "green"),
+    Valence = datawizard::rescale(Valence, to = c(1, 7), range = c(1, 9)),
+    Arousal = datawizard::rescale(Arousal, to = c(1, 7), range = c(1, 9))
+  ) %>% 
+  rename("Participant" = Anon_ID )
+
+length(unique(df$Participant)) # should be 377
+```
+
 ## Crowd Preference
 
 Here we extract one row per participant, which contains the demographic and personality and responses to the survey. 
 
 ```{r }
 
-dfsub <- df |>
+df_participants <- df |>
   group_by(Participant) |>
-  select(Participant, Age, Sex, Language, Crowd_Preference_Mean, starts_with("ipip"), SSA_Mean, SPS_Total_Mean, SIAS_Total_Mean, NSS, Upbringing_Environment, Current_Environment.y) |>
+  select(Participant, Age, Sex, Language, Crowd_Preference_Mean, starts_with("ipip"), SSA_Mean, SPS_Total_Mean, SIAS_Total_Mean, NSS, Upbringing_Environment, Current_Environment) |>
   slice(1) |>
   ungroup()
 
-nrow(dfsub)
+nrow(df_participants)
 ```
 
 ### Determinants of Crowd preference
 
 ```{r}
 
-dfsub <- dfsub %>% 
+df_participants <- df_participants %>% 
   filter(!is.na(Crowd_Preference_Mean))
 
-correlation::correlation(select(dfsub, Crowd_Preference_Mean),
-  select(dfsub, SSA_Mean),
+correlation::correlation(select(df_participants, Crowd_Preference_Mean),
+  select(df_participants, SSA_Mean),
   bayesian = TRUE
 ) |>
   arrange(desc(BF)) 
 
-crowd_cortests <- correlation::correlation(select(dfsub, Crowd_Preference_Mean),
-  select(dfsub, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
+crowd_cortests <- correlation::correlation(select(df_participants, Crowd_Preference_Mean),
+  select(df_participants, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
   bayesian = TRUE
 ) |>
   arrange(desc(BF)) 
@@ -86,9 +114,9 @@ crowd_cortests
 
 ```{r}
 
-t1 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Sex, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
-t2 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Upbringing_Environment, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
-t3 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Current_Environment.y, data = dfsub |> filter(!is.na(Crowd_Preference_Mean)))
+t1 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Sex, data = df_participants |> filter(!is.na(Crowd_Preference_Mean)))
+t2 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Upbringing_Environment, data = df_participants |> filter(!is.na(Crowd_Preference_Mean)))
+t3 <- BayesFactor::ttestBF(formula = Crowd_Preference_Mean ~ Current_Environment, data = df_participants |> filter(!is.na(Crowd_Preference_Mean)))
 
 library(bayestestR)
 library(kableExtra)
@@ -114,37 +142,24 @@ crowd_cortests %>% bind_rows(crowd_ttests) %>%
 
 ```
 
-Responses by preferences
+## Responses by preferences
+
+Here we estimate a model of WillingnessToWalk (i.e. the desire to visit a place). We estimate a null mode and a model in which we adjust for pedestrian counts and beauty.
 
 ```{r}
 
-# dfsub %>% 
-#   ungroup() %>% 
-#   select(Crowd_Preference_Mean, ipip_Extroversion,
-#   ipip_Agreeableness, ipip_Conscientiousness,
-#   ipip_Neuroticism, ipip_Openness, ipip_Honesty ) %>% 
-#   correlation(partial = TRUE) %>% 
-#   # data.frame()
-#   filter(p < 0.001) %>% 
-#   plot()
+fit0 <-lmer(WillingnessToWalk ~ 1 + (1  | Participant), data =  na.omit(df[c("Participant", "WillingnessToWalk","video_mean_pedcounts", "Beauty" )]) )
 
+fit <-lmer(WillingnessToWalk ~ video_mean_pedcounts + Beauty + (1 + video_mean_pedcounts | Participant), data =  na.omit(df[c("Participant", "WillingnessToWalk","video_mean_pedcounts", "Beauty" )]))
 
-
-```
-
-
-
-```{r}
-
-fit0 <-lmer(Attractiveness ~ 1 + (1  | Participant), data =  df)
-fit <-lmer(Attractiveness ~ mean_pedcounts + Beauty + (1 + mean_pedcounts | Participant) + (1|Nationality), data =  df)
 anova(fit0, fit)
 anova(fit)
+
 summary(fit)
 
 ```
 
-Extract participant-level intercepts from the model
+We then extract participant-level intercepts from the model
 
 ```{r}
 re <- lme4::ranef(fit)
@@ -152,49 +167,38 @@ names(re)
 
 re <- data.frame(Participant = rownames( re$Participant), 
                  Intercept = re$Participant$`(Intercept)`, 
-                 Slope = re$Participant$mean_pedcounts)
+                 Slope = re$Participant$video_mean_pedcounts)
 ```
 
 Merge participant trait responses (e.g. preference for crowds) with reactions (random intercepts)
 
 ```{r}
-dfsub <- dfsub %>% 
+df_participants <- df_participants %>% 
   left_join(re, by = c("Participant"="Participant"))
 
-names(dfsub)
+names(df_participants)
 ```
 
 Correlation between preference for crowds and psychological reaction when crowded
 
 ```{r}
 
-correlation::correlation(select(dfsub, Intercept),
-  select(dfsub, Crowd_Preference_Mean, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
+correlation::correlation(select(df_participants, Intercept),
+  select(df_participants, Crowd_Preference_Mean, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
   bayesian = TRUE
 )
 
 ```
 ```{r}
 
-correlation::correlation(select(dfsub, Intercept),
-  select(dfsub, Crowd_Preference_Mean, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
+correlation::correlation(select(df_participants, Intercept),
+  select(df_participants, Crowd_Preference_Mean, starts_with("ipip_"), SSA_Mean, NSS, SIAS_Total_Mean, SPS_Total_Mean, Age),
   bayesian = TRUE
 )
 
-correlation::correlation(select(dfsub, Intercept, Slope),
-  select(dfsub, Crowd_Preference_Mean),
+correlation::correlation(select(df_participants, Intercept, Slope),
+  select(df_participants, Crowd_Preference_Mean),
   bayesian = TRUE
 )
 
 ```
-
-Print (draft)
-
-```{r}
-test %>% 
-  ggplot(aes(Crowd_Preference_Mean, Intercept)) + 
-  geom_point() + 
-  geom_smooth(method = "lm")
-```
-
-

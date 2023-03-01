@@ -1,9 +1,9 @@
 ---
 title: "Data pruning"
-subtitle: "NICE Project, online study"
-output: html
+subtitle: NICE Project, online study
+output: html_document
 date: "`r Sys.Date()`"
-editor_options: 
+editor_options:
   chunk_output_type: inline
 ---
 
@@ -39,17 +39,31 @@ library(patchwork)
 
 ```{r}
 
-folder
+folder <- rstudioapi::selectDirectory(
+  caption = "Select Directory",
+  label = "Select"
+)
 
-df <- read.csv(paste0(folder, 'data/data_preprocessed_no_demographics.csv')) %>% select(-X)
+df <- read.csv(paste0(folder, '/9_analysis/Online Study/data/preprocessed.csv')) %>% select(-X)
 nrow(df)
 length(unique(df$Participant))
+df <- df %>% 
+  rename("trial_duration" = Video_Time)
+names(df)
+
 ```
 
 ```{r, }
-video_data <- read_csv(paste0(folder,"../../3_materials/stimuli_scripts/final_set_with_testing_groups_typology_220914.csv"))
+video_data <- read_csv(paste0(folder,"/3_materials/stimuli_scripts/final_set_with_testing_groups_typology_220914.csv"))
 length(unique(video_data$videoname))
 
+# add a consistent prefix on columns related to the stimuli (aka 'video')
+video_data <- video_data %>% rename_with(.cols = everything(), function(x){
+  ifelse(str_starts(x, "video|video_"), 
+     paste0("video_", str_remove(x, "video|video_")),
+     paste0("video_", x))  }) # v.1.0.4.
+
+names(video_data)
 ```
 
 A total of `r length(unique(df$Participant))` completed the study in prolific, and watched a total of `r length(unique(df$Video))`. Many of them faced streaming issues and had low attention scores, let's develop a strategy to exlude them from analysis.
@@ -59,7 +73,7 @@ A total of `r length(unique(df$Participant))` completed the study in prolific, a
 ```{r}
 
 df <- df %>%
-    left_join(video_data, by = c("Video" = "link"))
+    left_join(video_data, by = c("Video" = "video_link"))
 
 ```
 
@@ -129,7 +143,7 @@ df |>
   group_by(Participant) |> 
   add_count() |>
   filter( n < 3) |>
-  ggplot(aes(Video_Time , Distracted_Time)) +
+  ggplot(aes(trial_duration , Distracted_Time)) +
   geom_point() + ggtitle("Is distraction time explained by slow video buffering?")
   
 ```
@@ -209,7 +223,7 @@ low_effort_ids <- df |>
     filter(av_value < 0.75) %>% 
     pull(Participant)
 
-low_effort_ids
+# low_effort_ids
 
 ```
 
@@ -220,9 +234,9 @@ We should also remove participant that had severe video streaming problems as th
 ```{r}
 df_pruned  %>% 
   ungroup() %>% 
-  filter(Video_Time > 30) %>% 
-  mutate(duration = if_else(duration > 30, 30, duration)) %>% 
-  mutate(Buffering = Video_Time - duration) %>% 
+  # filter(trial_duration > 30) %>%
+  mutate(duration = if_else(video_duration > 30, 30, video_duration)) %>% # some videos are in fact longer than 30 seconds, but playback was capped at 30 seconds
+  mutate(Buffering = trial_duration - video_duration) %>% 
   arrange(Buffering) %>% 
   ggplot(aes(cumsum(Buffering), Buffering, colour = Buffering > 30)) +
   geom_point() +
@@ -230,11 +244,10 @@ df_pruned  %>%
   labs(title = "Video buffering time per trial" ,subtitle = "Buffering = Playback duration - Video duration")
   
 ```
-
-We could also be concerned that when the videos take longer to load, participants 'sense of presence' dips. Visual inspection (below) suggests that is not the case.
+In the figure above we see that a number of trials show buffering less than 0, which means the trial_duration < video_duration, that indicates some kind of issues with the stimuli presentation. We remove these. We could also be concerned that when the videos take longer to load, participants 'sense of presence' dips. Visual inspection (below) suggests that is not the case.
 
 ```{r}
-ggplot(df_pruned, aes(Video_Time, Presence) )  + 
+ggplot(df_pruned, aes(trial_duration, Presence) )  + 
   geom_jitter() + geom_smooth(method = "lm") + 
   geom_vline(xintercept = 60, colour = "red", linetype = "dashed") + 
   theme_classic() + 
@@ -280,10 +293,10 @@ Now we will exclude videos:
 ```{r}
 
 df_pruned <- df_pruned |>
-  mutate(duration = if_else(duration > 30, 30, duration),
-         Buffering = Video_Time - duration) |>
-  filter(Buffering < duration,
-         duration < Video_Time) 
+  mutate(video_duration = if_else(video_duration > 30, 30, video_duration),
+         Buffering = trial_duration - video_duration) |>
+  filter(Buffering < video_duration,
+         video_duration < trial_duration) 
 
 n_distinct( df_pruned$Participant )
 
@@ -356,15 +369,17 @@ Keep columns we will use later.
 names(df_pruned)
 
 df_pruned <- df_pruned %>%
-  select(Video, Participant, Age, Restoration, Presence, Willingness_to_walk = Attractiveness, Beauty, Structure, Interest, Familiarity, Scenicness = Scenery, Crowdedness, Positivity, Excitement, 
-         Video_Time, Distracted_Time, Total_Time_Elapsed, Distracted_n, video_name = name_df_keep, duration, Buffering, n_frames, width, testing_group, primary_category, secondary_category, video_city = City, video_country = Country, mean_pedcounts = mean, sum_pedcounts = sum,  
-         SSA_Mean, Concern_Covid_Mean, SIAS_Total_Mean, SPS_Total_Mean, ipip_Extroversion, ipip_Agreeableness, ipip_Conscientiousness, ipip_Neuroticism, ipip_Openness, ipip_Honesty, Crowd_Preference_Mean,  )
+  select(Video, Participant, Restoration, Presence, WillingnessToWalk, Beauty, Structure, Interest, Familiarity, Scenic, Crowdedness, Width, Valence, Arousal, trial_duration, Distracted_Time, SSA_Mean, Concern_Covid_Mean, SIAS_Total_Mean, SPS_Total_Mean, ipip_Extroversion, ipip_Agreeableness, ipip_Conscientiousness, ipip_Neuroticism, ipip_Openness, ipip_Honesty, Crowd_Preference_Mean, Age, Background_Architecture, Background_Arts, Background_Rural, Grow.up.country, Grow.up.City, Lives_now, years_Lives_now, NSS, Condition, screen_width, screen_height, video_name, video_name_df, video_name_df_keep, video_quality, video_rendition, video_fps, video_duration, video_Country, video_Cluster, video_City, video_testing_group, video_primary_category, video_secondary_category, video_n_frames, video_mean_pedcounts, video_max_pedcounts, video_sum_pedcounts, Distracted_n, Buffering)
+    
+    # Video, Participant, Age, Restoration, Presence, Willingness_to_walk = Attractiveness, Beauty, Structure, Interest, Familiarity, Scenicness = Scenery, Crowdedness, Positivity, Excitement, 
+    #      trial_duration, Distracted_Time, Total_Time_Elapsed, Distracted_n, video_name = name_df_keep, duration, Buffering, n_frames, width, testing_group, primary_category, secondary_category, video_city = City, video_country = Country, mean_pedcounts = mean, sum_pedcounts = sum,  
+    #      SSA_Mean, Concern_Covid_Mean, SIAS_Total_Mean, SPS_Total_Mean, ipip_Extroversion, ipip_Agreeableness, ipip_Conscientiousness, ipip_Neuroticism, ipip_Openness, ipip_Honesty, Crowd_Preference_Mean,  )
 ```
 
 ## Add demographic data
 
 ```{r}
-demographics <- read_csv(paste0(folder, "data/demographics_merged.csv")) 
+demographics <- read_csv(paste0(folder, "/9_Analysis/Online Study/data/demographics_merged.csv")) 
 
 demographics <- demographics %>% 
   filter(!is.na(Participant)) %>% 
@@ -390,11 +405,31 @@ df_pruned <- df_pruned %>%
 
 n_distinct(df_pruned$Participant)
 
-skimr::skim(df_pruned)
+# skimr::skim(df_pruned)
 ```
+## ANONYMISE PROLIFIC IDS
+We will replace the prolific ids with an alphanumeric code, to release this data to open acces (OSF, etc).
+```{r}
+new_ids <-
+  df_pruned %>% 
+  select(Participant) %>% 
+  distinct(Participant) %>% 
+  mutate(Anon_ID = paste0(sample(1:length(unique(df_pruned$Participant)), replace = F), sample(LETTERS, replace = T), sample(LETTERS, replace = T)))
+
+
+new_ids %>% 
+  distinct(Anon_ID)
+
+df_pruned <- df_pruned %>% 
+  left_join(new_ids, by = "Participant") %>% # add anonymised ID based on Prolific ID
+  select(-Participant) # remove Prolific ID
+
+
+```
+
 
 ## EXPORT
 
 ```{r}
-write_csv(df_pruned,file = paste0("data/data_pruned_for_analysis_", Sys.Date(), ".csv"))
+write_csv(df_pruned, file = paste0(folder, "/9_analysis/Online Study/data/data_pruned_for_analysis_", Sys.Date(), ".csv"))
 ```
