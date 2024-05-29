@@ -1,0 +1,452 @@
+---
+title: "Attenuating subjective crowding through beauty an online study on the interaction between environment aesthetics, typology and crowding"
+subtitle: "Data pruning"
+output: 
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: lumen
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+date: "`r Sys.Date()`"
+editor_options:
+  chunk_output_type: inline
+---
+
+# Setup
+
+```{r setup, echo = FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(digits = 3)
+
+cache <- FALSE
+fig.width <- see::golden_ratio(7)
+fig.height <- 7
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  dpi = 450,
+  fig.path = "./figures/",
+  fig.width = fig.width,
+  fig.height = fig.height
+)
+```
+
+## Load libraries
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(ggdist)
+library(ggside)
+library(easystats)
+library(patchwork)
+```
+
+## Load data
+
+```{r}
+
+folder <- rstudioapi::selectDirectory(
+  caption = "Select Directory",
+  label = "Select"
+)
+
+df <- read.csv(paste0(folder, '/9_analysis/Online Study/data/preprocessed.csv')) %>% select(-X)
+nrow(df)
+length(unique(df$Participant))
+df <- df %>% 
+  rename("trial_duration" = Video_Time)
+names(df)
+
+```
+
+```{r, }
+video_data <- read_csv(paste0(folder,"/3_materials/stimuli_scripts/final_set_with_testing_groups_typology_240424.csv"))
+length(unique(video_data$videoname))
+
+# add a consistent prefix on columns related to the stimuli (aka 'video')
+video_data <- video_data %>% rename_with(.cols = everything(), function(x){
+  ifelse(str_starts(x, "video|video_"), 
+     paste0("video_", str_remove(x, "video|video_")),
+     paste0("video_", x))  }) # v.1.0.4.
+
+names(video_data)
+```
+
+A total of `r length(unique(df$Participant))` completed the study in prolific, and watched a total of `r length(unique(df$Video))`. Many of them faced streaming issues and had low attention scores, let's develop a strategy to exlude them from analysis.
+
+### Join participant response with video metadata
+
+```{r}
+
+df <- df %>%
+    left_join(video_data, by = c("Video" = "video_link"))
+
+```
+
+## Filtering based on attention metrics
+
+As an indirect measure of attention, during the experiment, we measured the duration (if any) that participants spent interacting with other programs in their computer. Browsers' javascript API includes the events *focus* and *blur* which are fired when the user interacts with the browser. In our case, when a participant clicks on a different browser tab, browser window, or different application, a new row is added in the log with an event = "blur"; when they return to the experiment another event = "focus" is added to the experiment log. We then calculated distracted time specifically for the video presentation trials, as the time interval between a *blur* and the next *focus* event, or between a *blur* and the end a trial (this was necessary for a few cases where the participant returned to the experiment after a video had finished playing).
+
+Below we inspect the data and decide on a filtering strategy.
+
+### Length of distractions
+
+We select all video (stimulus presentation) trials that distraction is more than 0, and convert milliseconds to seconds. We can observe there are 149 trials of some distraction out of `r nrow(df)` total trials.
+
+```{r}
+df |>
+  filter(Distracted_Time > 0) |>
+  mutate(Distracted_Time = Distracted_Time/1000,
+         Distracted_Time= round(Distracted_Time, digits = 0)) |>
+  arrange(Distracted_Time) |>
+  ggplot( aes(cumsum(Distracted_Time), Distracted_Time)) + 
+  geom_line() + 
+  geom_point() +
+  labs(title=  "Seconds spent away from the experiment window during video trials", x = "Ascending values")
+
+
+```
+
+### Distracted, in how many videos?
+
+Second, we should examine if these 'moments of distraction' happen randomly across participants, or if some participants are consistently **not** paying attention to the task. So we here we count in how many trials per participant distracted time is above 0. We can see that while some participants are distracted once or twice, others are distracted for 7 or even 27 out 30 video trials.
+
+```{r}
+df |>
+  filter(Distracted_Time > 0) |>
+  group_by(Participant) |> 
+  count() |>
+  arrange(n) |>
+  pull(n)
+
+```
+
+## Distraction duration
+
+Let's look more closely at those participants with no more than 2 distractions. How long where they? They seem to range from minimal (1 second) to severe (5 minutes or 320 seconds).
+
+```{r}
+df |>
+  filter(Distracted_Time > 0) |>
+  group_by(Participant) |> 
+  add_count() |>
+  filter( n < 3) |>
+  mutate(Distracted_Time = Distracted_Time/1000,
+         Distracted_Time= round(Distracted_Time, digits = 0)) |>
+  arrange(Distracted_Time) |>
+  pull(Distracted_Time)
+```
+
+## Reasons for distraction
+
+We cannot really know why participants chose to look away from the experiment. However, we know each video should play for 30 seconds, and it can take some seconds to buffer based on the internet connection. We also know that when the connection is bad, a video can take quite some time to load, which could explain why participants switch away from the experiment.
+
+```{r}
+df |>
+  filter(Distracted_Time > 0) |>
+  mutate(Distracted_Time = Distracted_Time/1000,
+         Distracted_Time= round(Distracted_Time, digits = 0)) |>
+  group_by(Participant) |> 
+  add_count() |>
+  filter( n < 3) |>
+  ggplot(aes(trial_duration , Distracted_Time)) +
+  geom_point() + ggtitle("Is distraction time explained by slow video buffering?")
+  
+```
+
+It's quite unclear. Even for videos with fast buffering (around 30+ seconds for the entire video trial), participants spend some time distracted.
+
+# Filtering strategy
+
+Based on the audit above, we concluded the following filtering strategy:
+
+1.  We will remove completely the data from non-attentive participants, defined as anyone who was distracted in more than 2 video trials;
+2.  We will remove responses from all trials that participants were distracted at all (i.e. if *Distracted Time \> 0*), but we will keep the rest of their responses.
+
+```{r}
+
+df_pruned <- df |>
+  group_by(Participant) |> 
+  mutate( Distracted_n = sum(Distracted_Time > 0)) |>
+  filter( Distracted_n < 3) |> # remove participants who were distracted at all for more than 2 videos
+  mutate( Distracted_Time = Distracted_Time/1000,
+          Distracted_Time= round(Distracted_Time, digits = 0)) |>
+  filter( Distracted_Time == 0) # keep only reponses with 0 distraction time
+
+n_distinct(df_pruned$Participant)
+
+df_pruned %>% 
+  nrow()
+
+```
+
+So after this pruning, we are left with `r n_distinct(df_pruned$Participant)` participants.
+
+## Response variance
+
+A second concern we have is if participants responded intentionally, or just 'clicked-away'... We will assess this by looking at the variance per response item, as well as the deviation from the average.
+
+```{r}
+
+df_pruned |>
+  group_by(Participant) |>
+  summarise_at(vars(3:13), function(x) sd(x, na.rm = TRUE)) %>% 
+  pivot_longer(cols = 2:12) |>
+  ggplot(aes(value, Participant, colour = value < 0.25)) + 
+  geom_point() +
+  facet_grid(.~name) +
+  guides( y = "none")
+ 
+```
+
+In the figure above, we can observe that some participants have very low variance on some of the scales. One exception is *Presence* where many participants don't have a large variance, but that is to be expected, we have included this parameter as a manipulation check and we expect presence to be stable across trials.
+
+Now we will calculate the average SD across scales for each participant.
+
+```{r}
+df_pruned |>
+    group_by(Participant) |>
+    summarise_at(vars(3:13), function(x) sd(x, na.rm = TRUE)) %>% 
+    pivot_longer(cols = 2:12) |>
+    group_by(Participant) %>% 
+    summarise(av_value = mean(value)) %>% arrange(av_value) %>% 
+    ggplot(aes( av_value, reorder(Participant, av_value)))+ guides(y = "none") + lims(x = c(0, 7)) +
+    geom_point()
+
+```
+
+Here we see that 3 participants specifcally, have consistently low variance in their responses. We will interepret this as being a sign of low-effort and we will remove them.
+
+```{r}
+
+# save the ids separately
+low_effort_ids <- df |>
+    group_by(Participant) |>
+    summarise_at(vars(3:13), function(x) sd(x, na.rm = TRUE)) %>% 
+    pivot_longer(cols = 2:12) |>
+    group_by(Participant) %>% 
+    summarise(av_value = mean(value)) %>% arrange(av_value) %>% 
+    filter(av_value < 0.75) %>% 
+    pull(Participant)
+
+length(low_effort_ids)
+
+```
+
+## Video buffering
+
+We should also remove participant that had severe video streaming problems as this might have influenced their attention and/or appraisals.
+
+```{r}
+df_pruned  %>% 
+  ungroup() %>% 
+  # filter(trial_duration > 30) %>%
+  mutate(duration = if_else(video_duration > 30, 30, video_duration)) %>% # some videos are in fact longer than 30 seconds, but playback was capped at 30 seconds
+  mutate(Buffering = trial_duration - video_duration) %>% 
+  arrange(Buffering) %>% 
+  ggplot(aes(cumsum(Buffering), Buffering, colour = Buffering > 30)) +
+  geom_point() +
+  guides(x = "none") + 
+  labs(title = "Video buffering time per trial" ,subtitle = "Buffering = Playback duration - Video duration")
+  
+```
+In the figure above we see that a number of trials show buffering less than 0, which means the trial_duration < video_duration, that indicates some kind of issues with the stimuli presentation. We remove these. We could also be concerned that when the videos take longer to load, participants 'sense of presence' dips. Visual inspection (below) suggests that is not the case.
+
+```{r}
+ggplot(df_pruned, aes(trial_duration, Presence) )  + 
+  geom_jitter() + geom_smooth(method = "lm") + 
+  geom_vline(xintercept = 60, colour = "red", linetype = "dashed") + 
+  theme_classic() + 
+  labs(title = "Does sense of presence drop with longer video loading times?", subtitle = "It does not like this is an issue")
+```
+
+We should also test if some participants had too many streaming problems which could also influence their responses.
+
+```{r}
+
+df_pruned %>% 
+  group_by(Participant) %>% 
+  tally( ) %>% 
+  arrange(n) %>% 
+  count(n)
+  
+```
+
+## Exclude low-effort (i.e. low response stdev)
+
+Finally, we decided to keep videos where excess time (buffering) was less than 2/3 of the video duration, i.e. no more than 20 seconds. This leads to a total of 50 seconds for the whole video duration.
+
+```{r}
+previous_video_count = nrow(df)
+
+df_pruned <- df_pruned |>
+  filter(! Participant %in% low_effort_ids)
+```
+
+We define as buffering time. the excess time of each trial, in addition to the duration of the video, in other words time that is attributed to loading the video to the participant's browser.
+
+$$
+(1)~ video~duration + buffering = video~time
+$$
+$$
+(2)~ buffering = video~time - video~duration
+$$
+
+Now we will exclude videos:
+
+1.  Where the buffering time exceeds the video duration.
+2.  Where the video playback is less than the duration of the video (this would indicate that for some reason the trial was skipped accidentally for some reason.
+
+```{r}
+
+df_pruned <- df_pruned |>
+  mutate(video_duration = if_else(video_duration > 30, 30, video_duration),
+         Buffering = trial_duration - video_duration) |>
+  filter(Buffering < video_duration,
+         video_duration < trial_duration) 
+
+n_distinct( df_pruned$Participant )
+
+```
+
+One last step, if we have too few trials from a participant, we should also exclude their responses. We create a summary table, showing how many trials we have per participant. We see that 310 participants have full sets (30 trials), but 10 participants have 14 or less trials left after removing videos with streaming issues.
+
+```{r}
+df_pruned %>% 
+   group_by(Participant) %>% 
+  tally() %>% 
+  arrange(n) %>% pull(n) %>% table(.)
+```
+
+We keep data from participants with 15 or more valid trials.
+
+```{r}
+ids_to_keep <- df_pruned %>% 
+  group_by(Participant) %>% 
+  tally() %>% 
+  arrange(n) %>% 
+  filter(n >=15) %>%  
+  pull(Participant)
+
+length(ids_to_keep)
+
+df_pruned <- df_pruned |>
+  filter(Participant %in% ids_to_keep)
+```
+
+With this step we dropped `r nrow(df_pruned) - previous_video_count` videos.
+
+Following these filtering steps, we now have retained `r n_distinct( df_pruned$Participant )` participants out of `r n_distinct( df$Participant )`, and we have have kept `r nrow(df_pruned)` video trials, out of `r nrow(df)`.
+
+```{r}
+
+df_pruned %>%   
+  nrow()
+
+```
+
+## SUMMARY
+
+```{r}
+
+length(unique(df$Participant)) # original completed participants
+length(unique(df_pruned$Participant)) # original completed participants
+
+```
+
+## Views per video
+
+```{r}
+df_pruned %>%   
+  group_by(Video) %>% 
+  tally(name = "n_per_video") %>% 
+  arrange(n_per_video) %>% 
+  ungroup() %>% 
+  summarise(av_n_per_video = mean(n_per_video), 
+            sd = sd(n_per_video), 
+            range = paste(range(n_per_video), collapse = "-"))
+```
+
+## cleanup
+
+Keep columns we will use later. 
+
+```{r}
+
+names(df_pruned)
+
+
+df_pruned <- df_pruned %>%
+  select(Participant, Restoration, Presence, WillingnessToWalk, Beauty, Structure, Interest, Familiarity, Scenic, Crowdedness, Width, Valence, Arousal, trial_duration, Distracted_Time, SSA_Mean, Concern_Covid_Mean, SIAS_Total_Mean, SPS_Total_Mean, ipip_Extroversion, ipip_Agreeableness, ipip_Conscientiousness, ipip_Neuroticism, ipip_Openness, ipip_Honesty, Crowd_Preference_Mean, NSS, Condition, screen_width, screen_height, video_name, video_name_df, video_name_df_keep, video_quality, video_rendition, video_fps, video_duration, video_Country, video_Cluster, video_City, video_testing_group, video_primary_category, video_secondary_category, video_n_frames, video_mean_pedcounts, video_max_pedcounts, video_sum_pedcounts, Distracted_n, Buffering)
+    
+   
+```
+
+## Add demographic data
+
+```{r}
+demographics <- read_csv(paste0(folder, "/9_Analysis/Online Study/data/demographics_merged.csv")) 
+
+demographics <- demographics %>% 
+  filter(!is.na(Participant)) %>% 
+  mutate(
+    Employment = if_else(Employment_status %in% c("Full-time", "Part-time") | Student_status == "Yes", "Working/Studying", "Other (e.g., unemployed, retired)"),
+    Age_breaks = cut(Age, breaks = c(17.9, 30, 50, 65, 100), labels = c("18–29", "30-49", "50-64", "65+") ),
+    Education = if_else(ArchBg == "Yes", "Architecture", if_else(ArtsBg == "Yes", "Arts", "Other")),
+    Upbringing_Urban= if_else(tolower(urban_rural_background) == "urban", "Urban", "Other"),
+    Upbringing_Rural= if_else(tolower(urban_rural_background) == "rural", "Rural", "Other"),
+    Current_Urban = if_else(tolower(urban_rural_now) == "urban", "Urban", "Other")) %>% 
+  mutate(
+    Upbringing_Urban = factor(Upbringing_Urban, levels = c("Urban", "Other")),
+    Current_Urban = factor(Current_Urban, levels = c("Urban", "Other"))
+  )
+
+demographics <- demographics %>% 
+  select(Participant, Sex, Age, Language, ArtsBg, ArchBg, Language, Employment_status, Nationality, Approval_rate, Ethnicity, Student_status, Employment, Age_breaks, Education, Upbringing_Urban, Upbringing_Rural, Current_Urban)
+
+length(unique(demographics$Participant))
+  
+  
+df_pruned <- df_pruned %>% 
+  left_join(demographics, by = "Participant") %>% 
+  ungroup()
+
+n_distinct(df_pruned$Participant)
+
+# skimr::skim(df_pruned)
+```
+## ANONYMISE PROLIFIC IDS
+We will replace the prolific ids with an alphanumeric code, to release this data to open acces (OSF, etc).
+```{r}
+
+new_ids <-
+  df_pruned %>% 
+  select(Participant) %>% 
+  distinct(Participant) %>% 
+  mutate(Anonymised_ID = paste0(sample(1:length(unique(df_pruned$Participant)), replace = F), sample(LETTERS, replace = T), sample(LETTERS, replace = T))) 
+
+
+new_ids %>% 
+  distinct(Anonymised_ID)
+
+df_pruned <- df_pruned %>% 
+  left_join(new_ids, by = "Participant") %>% # add anonymised ID based on Prolific ID
+  relocate(Anonymised_ID) %>% 
+  select(-Participant) # remove Prolific ID
+
+
+```
+
+
+## EXPORT
+
+```{r}
+write_csv(df_pruned, file = paste0("data/data_pruned_for_analysis_", Sys.Date(), ".csv"))
+```

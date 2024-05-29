@@ -1,0 +1,202 @@
+---
+title: "NICE Online"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: lumen
+date: "`r Sys.Date()`"
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+#remove.packages('dplyr')
+#remove.packages('plyr')
+#remove.packages('tidyverse')
+#install.packages('dplyr')
+#install.packages('plyr')
+#install.packages('tidyverse')
+```
+
+
+# Setup
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+options(digits = 3)
+
+cache <- FALSE
+fig.width <- see::golden_ratio(7)
+fig.height <- 7
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  dpi = 450,
+  fig.path = "./figures/",
+  fig.width = fig.width,
+  fig.height = fig.height
+)
+
+# palette
+col_urban = "#FFC125" # "#E1BE6A"
+col_green = "#40B0A6"
+
+rename_explanator <- function(old_names) {
+new_names <- old_names # gsub("video_mean_pedcounts", "Ped. Counts", old_names)
+setNames(new_names, old_names)
+}
+
+```
+
+## Libraries used
+
+Load libraries necessary to run the script.
+
+```{r}
+library(tidyverse) # general
+library(ggdist) # plot distributions
+library(ggside) # plot distributions on the plot margins
+library(easystats) # estimate and process statistical models
+library(patchwork) # combine multiple plots
+library(modelsummary) # for tables
+
+options("modelsummary_format_numeric_latex" = "plain")
+options(modelsummary_get = "broom")
+
+library(see) # for plotting
+library(ggraph) # needs to be loaded
+library(ggdist) # plotting distributions
+library(kableExtra) # export tables to latex
+library(correlation) # easy correlation
+
+```
+
+## Load data
+
+
+```{r message=FALSE, warning=FALSE}
+
+
+df <- read.csv("/Users/panosmavros/Library/CloudStorage/Dropbox/FCL_Panos/01_Projects/NICE/NICE_Group-Folder/9_analysis/Online Study/data/data_pruned_for_analysis_2023-05-15.csv")%>% 
+  mutate(
+    Typology = fct_relevel(video_primary_category, "urban", "green"),
+    Valence = datawizard::rescale(Valence, to = c(1, 7), range = c(1, 9)),
+    Arousal = datawizard::rescale(Arousal, to = c(1, 7), range = c(1, 9))
+  ) %>% 
+  rename("Participant" = Anonymised_ID ) 
+
+length(unique(df$Participant))
+```
+
+## Determinants of Subjective Crowdedness
+
+### Models
+
+```{r}
+try(rm(preds, params, mods, vars), silent = T) # remove objects from previous runs, to be safe.
+params <- data.frame()
+mods <- list()
+outcome_var <- "Crowdedness"
+vars <- c("Beauty") # replaced familiarity with Beauty
+
+preds <- data.frame()
+dat <- data.frame()
+mods <- list()
+vars <- c("Crowdedness", "Structure", "Scenic", "Width") #  "Interest",
+
+
+
+#### boot strapping
+
+n_bootstraps <- 100
+sample_sizes <- c(10,50,100,150,200,250,300,370)
+
+set.seed(10)
+results <- data.frame('idx'=numeric(),'n'=numeric(),'p'=numeric(), 'e' = numeric())
+
+# Subsample data
+all_participants <- data.frame('participants' = unique(df$Participant))  
+
+df <- df %>% drop_na(Crowdedness)
+
+count_b=1
+for (n_b in sample_sizes){
+  print(paste0("#",n_b))
+  for (i_b in 1:n_bootstraps){
+      p_sub <- slice_sample(all_participants, n = n_b, replace = TRUE)
+      s_df <- df[df$Participant %in% p_sub$participants,]
+
+
+      # Original Model
+      for (i in 1:length(vars)) {
+        var <- vars[i]
+        print(i_b)
+      
+        f <- "Beauty ~ poly(Crowdedness, 2) * Typology + Familiarity + (Crowdedness|Participant)"
+      
+        model <- lme4::lmer(as.formula(f), data = s_df )
+
+        # Parameters
+        param <- parameters::parameters(model, effects = "fixed")
+        param$Variable <- var
+        params <- rbind(params, param)
+        
+        effsz <- effectsize(model)
+        
+        my_p=subset(param,Parameter=="poly(Crowdedness, 2)2")$p
+        my_eff_size = subset(effsz, Parameter=="poly(Crowdedness, 2)2")$Std_Coefficient
+        results[nrow(results) + 1, ] <- c(count_b, n_b, my_p, my_eff_size )
+        count_b<-count_b+1
+      }
+  }
+}
+```
+
+```{r}
+library(tidyverse)
+results %>% 
+  filter(!is.na(p)) %>% 
+  mutate(p.s = as.numeric(p<0.05))  %>% 
+  group_by(n) %>% 
+  summarise(p = mean(p.s), 
+            sd = sd(p.s)) %>% 
+  ggplot(aes(n, p)) +
+  geom_ribbon(aes(n, ymin = p-sd, ymax = p+sd), fill = "lightgrey")+
+  geom_point() + 
+  geom_line() +
+  theme_classic()
+
+# effect
+results %>% 
+  filter(!is.na(p)) %>% 
+  mutate(p.s = as.numeric(p<0.05))  %>% 
+  # group_by(n) %>% 
+  # summarise(p = mean(p.s), 
+  #           sd = sd(p.s)) %>% 
+  ggplot(aes(as.factor(n), e)) +
+  # geom_ribbon(aes(n, ymin = p-sd, ymax = p+sd), fill = "lightgrey")+
+  geom_boxplot()+
+  geom_point() + 
+  # geom_line() +
+  theme_classic() 
+  scale_y_continuous(limits = c(0, 0.1))
+
+```
+
+```{r}
+library(r2glmm)
+r2glmm::r2beta(model) 
+```
+
+
+
+```{r}
+write.csv(results, "./bootstrapping_POWA_BEAUTY.csv", row.names=FALSE)
+```

@@ -1,0 +1,125 @@
+---
+title: "Attenuating subjective crowding through beauty an online study on the interaction between environment aesthetics, typology and crowdedness"
+subtitle: "Demographics Report"
+author: "Panos Mavros"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: lumen
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+---
+
+This is an R Markdown Notebook with the analysis of the NICE online study. To run the code below, you can open the file in [RStudio](https://posit.co/products/open-source/rstudio/).
+
+# Setup
+## Load libraries
+```{r setup, echo=FALSE, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, echo=TRUE}
+library(furniture) # formating table 1
+library(tidyverse) # general wranling
+```
+
+## Load data
+### Study data
+```{r}
+
+df <- read.csv(paste0( 'data/data_pruned_for_analysis_2023-05-15.csv'))
+length(unique(df$Anonymised_ID))
+
+```
+
+# Stimuli overview
+how many unique countries are the videos from? (collate for appendix of manuscript)
+```{r}
+paste(sort(unique(df$video_Country)), collapse = ", ")
+```
+
+Count how many unique videos there are from every city.
+```{r}
+paste(sort(unique(df$video_City)), collapse = ", ")
+
+
+videos_per_city <- df %>% 
+  group_by(video_name) %>% 
+  slice(1) %>% 
+  group_by(video_City) %>% 
+  tally()
+
+```
+Collate for manuscript (in Appendix).
+```{r}
+videos_per_city %>% 
+  mutate(text = sprintf(fmt = "%s (%i)",video_City, n)) %>% 
+  pull(text) %>% 
+  paste(., collapse= ", ")
+```
+
+# Demographics
+```{r}
+
+names(df)
+
+df %>% 
+  filter()
+```
+
+## Participant characteristics
+
+This table shows participants' demographic characteristics. It will be transferred to Latex and to the manuscript at a later stage.
+
+Note: "From prolific.co https://researcher-help.prolific.co/hc/en-gb/articles/360019238413-Representative-samples-FAQ:
+
+Starting with the youngest allowable participation age on Prolific, we stratify age using five 9-year brackets: 18-27, 28-37, 38-47, 48-57, and 58+. ‘Sex’ is stratified into male and female. ‘Ethnicity (simplified)’ is stratified into the five categories recommended by the UK Office of National Statistics: White, Mixed, Asian, Black and Other."
+
+```{r}
+
+table_1 <- df  %>% 
+  group_by(Anonymised_ID) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  furniture::table1(., splitby = ~ Sex,total = TRUE,
+         # Sex,
+         Age = Age_breaks,
+         Education,
+         Ethnicity, 
+         "Employment" = Employment, 
+         "Upbringing Environment" = `Upbringing_Urban`,
+         "Current Environment"= `Current_Urban`,
+         "Approval rate" = Approval_rate,
+         output = "latex2",
+         booktabs = TRUE, caption = "Participant characteristics", label = "tab:participant_characteristics"
+        ) 
+
+write(x = table_1, file = "output/table_1.tex") 
+
+df  %>% 
+  group_by(Anonymised_ID) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  furniture::table1(., splitby = ~ Sex,total = TRUE,
+         # Sex,
+         Age = Age_breaks,
+         Education,
+         Ethnicity, 
+         "Employment" = Employment, 
+         "Upbringing Environment" = `Upbringing_Urban`,
+         "Current Environment"= `Current_Urban`,
+         "Approval rate" = Approval_rate,
+         # output = "html",
+         booktabs = F, caption = "Participant characteristics", label = "tab:participant_characteristics"
+        ) %>% 
+  kableExtra::kbl() %>% kableExtra::kable_classic()
+
+
+```
