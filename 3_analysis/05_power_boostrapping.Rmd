@@ -1,0 +1,776 @@
+---
+title: "Boostrapping-based Power analysis for NICE Online study"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: lumen
+date: "`r Sys.Date()`"
+editor_options:
+  chunk_output_type: console
+---
+
+# Boostrapping-based Power analysis for NICE Online study
+
+## Authors: Leonel Aguilar, Panos Mavros
+
+# Setup
+
+```{r}
+#remove.packages('dplyr')
+#remove.packages('plyr')
+#remove.packages('tidyverse')
+#install.packages('dplyr')
+#install.packages('plyr')
+#install.packages('tidyverse')
+library(effectsize)
+library(tidyverse)
+library(glue)
+
+# palette
+col_urban = "#FFC125" # "#E1BE6A"
+col_green = "#40B0A6"
+
+rename_explanator <- function(old_names) {
+  new_names <- old_names # gsub("video_mean_pedcounts", "Ped. Counts", old_names)
+  setNames(new_names, old_names)
+}
+
+df <-
+  read.csv(
+    "data/data_pruned_for_analysis_2024-04-26.csv"
+  ) %>%
+  mutate(
+    Typology = fct_relevel(video_primary_category, "urban", "green"),
+    Valence = datawizard::rescale(Valence, to = c(1, 7), range = c(1, 9)),
+    Arousal = datawizard::rescale(Arousal, to = c(1, 7), range = c(1, 9))
+  ) %>%
+  rename("Participant" = Anonymised_ID )
+```
+
+```{r}
+formulas <- c()
+```
+
+# PART 1 - power - subjective crowdedness
+
+```{r}
+try(rm(preds, params, mods, vars, dat), silent = T) # remove objects from previous simulations, to be safe.
+preds <- data.frame()
+params <- data.frame()
+dat <- data.frame()
+mods <- list()
+outcome_var <- "Crowdedness"
+vars <- c("Beauty", "Scenic","Width", "Structure", "Interest") 
+
+#### boot strapping
+
+n_bootstraps <- 100
+sample_sizes <- c(10,50,100,150,200,250,300,370)
+
+set.seed(10)
+results <- data.frame('dv' = character(), 'iv' = character(), 'idx'=numeric(),'n'=numeric(), 'param' = character(), 'p'=numeric(), 'e' = numeric())
+
+# Subsample data
+all_participants <- data.frame('participants' = unique(df$Participant))
+
+df <- df %>% drop_na(Crowdedness)
+
+# boostraping loop
+count_b=1
+sample_sizes
+for (n_b in sample_sizes){
+
+  # print(paste0("# sample size",n_b))
+
+  for (i_b in 1:n_bootstraps){
+
+    print(paste0("sample size:",n_b, " - boot: ", i_b))
+
+    p_sub <- slice_sample(all_participants, n = n_b, replace = TRUE) # randomly select n participants
+    s_df <- df[df$Participant %in% p_sub$participants,]
+    nrow(p_sub)
+
+    # start - here we have the Original Models as reported previously (file 03_analysis.Rmd)
+    # i=1
+    for (i in 1:length(vars)) {
+
+      var <- vars[i]
+      print(var)
+
+      f <- paste0(outcome_var, " ~ log1p(video_mean_pedcounts) * ", var, " +  log1p(video_mean_pedcounts) * Typology + ", var, "* Typology + Familiarity  + (", var, "|Participant)")
+      f
+      formulas <- c(formulas, f)
+      # next()
+  
+      try(model <- lme4::lmer(as.formula(f), data = s_df ))
+
+      # parameter
+      param <- parameters::parameters(model, effects = "fixed")
+      param
+      # effect size
+      effsz <- effectsize(model)
+
+      # my_p = subset(param, Parameter=="Beauty")$p
+      # my_p
+      #
+      # my_eff_size = subset(effsz, Parameter=="Beauty")$Std_Coefficient
+      results_tmp <- data.frame(formula = f, dv = outcome_var,
+                                iv = var,
+                                idx = count_b,
+                                n = n_b,
+                                param = param$Parameter,
+                                p = param$p,
+                                e = effsz$Std_Coefficient)
+
+      results <- results %>%
+        bind_rows(results_tmp)
+
+    }
+
+    count_b<-count_b+1
+  }
+}
+
+# write_csv(results, "bootstrapping_crowding.csv")
+```
+
+# PART 2 - power - Determinants of Beauty
+
+```{r}
+try(rm(preds, params, mods, vars, dat, results_part_2), silent = T) # remove objects from previous simulations, to be safe.
+preds <- data.frame()
+params <- data.frame()
+dat <- data.frame()
+mods <- list()
+outcome_var <- "Beauty"
+vars <- c("Crowdedness", "Structure", "Scenic", "Width", "Interest")
+
+
+#### boot strapping
+
+n_bootstraps <- 100
+sample_sizes <- c(10,50,100,150,200,250,300,370)
+n_bootstraps * length(sample_sizes)
+set.seed(10)
+results_part_2 <- data.frame('dv' = character(), 'iv' = character(), 'idx'=numeric(),'n'=numeric(), 'param' = character(), 'p'=numeric(), 'e' = numeric())
+
+# Subsample data
+all_participants <- data.frame('participants' = unique(df$Participant))
+
+df <- df %>% drop_na(Beauty)
+
+# boostraping loop
+count_b=1
+sample_sizes
+for (n_b in sample_sizes){
+
+  # print(paste0("# sample size",n_b))
+
+  for (i_b in 1:n_bootstraps){
+
+    print(paste0("sample size:",n_b, " - boot: ", i_b))
+
+    p_sub <- slice_sample(all_participants, n = n_b, replace = TRUE) # randomly select n participants
+    s_df <- df[df$Participant %in% p_sub$participants,]
+
+    nrow(p_sub)
+
+    # start - here we have the Original Models as reported previously (file 03_analysis.Rmd)
+    i=1
+    for (i in 1:length(vars)) {
+
+      var <- vars[i]
+      print(var)
+
+      s_df <- na.omit( s_df[c("Beauty","Crowdedness", "Structure", "Scenic", "Width", "Interest", "Typology", "Familiarity", "Participant")] )
+
+      f <- paste0(outcome_var," ~ poly(", var, ", 2) * Typology + Familiarity + (", var, "|Participant)")
+       formulas <- c(formulas, f)
+      # next()
+      model <- lme4::lmer(as.formula(f), data = s_df, )
+
+      # parameter
+      param <- parameters::parameters(model, effects = "fixed")
+      param
+      # effect size
+      effsz <- effectsize(model)
+
+      # my_p = subset(param, Parameter=="Beauty")$p
+      # my_p
+      #
+      # my_eff_size = subset(effsz, Parameter=="Beauty")$Std_Coefficient
+
+      results_tmp <- data.frame(dv = outcome_var,
+                                iv = var,
+                                idx = count_b,
+                                n = n_b,
+                                param = param$Parameter,
+                                p = param$p,
+                                e = effsz$Std_Coefficient)
+
+      results_part_2 <- results_part_2 %>%
+        bind_rows(results_tmp)
+      rm(results_tmp)
+
+    }
+
+    count_b<-count_b+1
+  }
+}
+
+# write_csv(results_part_2, "bootstrapping_beauty.csv")
+```
+
+# PART 3 - power - Psychological Reaction
+
+```{r}
+
+try(rm(preds, params, mods, vars, dat), silent = T) # remove objects from previous simulations, to be safe.
+preds <- data.frame()
+params <- data.frame()
+dat <- data.frame()
+mods <- list()
+outcome_vars <- c("WillingnessToWalk", "Valence", "Arousal", "Restoration",  "Presence")
+
+#### boot strapping
+
+n_bootstraps <- 100
+sample_sizes <- c(10,50,100,150,200,250,300,370)
+
+set.seed(10)
+results_part_3 <- data.frame('dv' = character(), 'iv' = character(), 'idx'=numeric(),'n'=numeric(), 'param' = character(), 'p'=numeric(), 'e' = numeric())
+
+# Subsample data
+all_participants <- data.frame('participants' = unique(df$Participant))
+
+df <- df %>% drop_na(Crowdedness)
+
+# boostraping loop
+count_b=1
+sample_sizes
+for (n_b in sample_sizes){
+
+  # print(paste0("# sample size",n_b))
+
+  for (i_b in 1:n_bootstraps){
+
+    print(paste0("sample size:",n_b, " - boot: ", i_b))
+
+    p_sub <- slice_sample(all_participants, n = n_b, replace = TRUE) # randomly select n participants
+    s_df <- df[df$Participant %in% p_sub$participants,]
+    nrow(p_sub)
+
+    # start - here we have the Original Models as reported previously (file 03_analysis.Rmd)
+    i=1
+    for (i in 1:length(outcome_vars)) {
+
+      outcome_var <- outcome_vars[i]
+      print(outcome_var)
+
+      f <- paste(outcome_var, " ~ Typology / (poly(Crowdedness, 2) * Beauty) + Familiarity + (1|Participant)")
+      f
+      formulas <- c(formulas, f)
+      # next()
+      model <- lme4::lmer(as.formula(f), data = s_df)
+
+      # parameter
+      param <- parameters::parameters(model, effects = "fixed")
+      param
+      # effect size
+      effsz <- effectsize(model)
+
+      # my_p = subset(param, Parameter=="Beauty")$p
+      # my_p
+      #
+      # my_eff_size = subset(effsz, Parameter=="Beauty")$Std_Coefficient
+
+      results_tmp <- data.frame(dv = outcome_var,
+                                # iv = var,
+                                idx = count_b,
+                                n = n_b,
+                                param = param$Parameter,
+                                p = param$p,
+                                e = effsz$Std_Coefficient)
+
+      results_part_3 <- results_part_3 %>%
+        bind_rows(results_tmp)
+      rm(results_tmp)
+
+    }
+
+    count_b<-count_b+1
+  }
+}
+
+# write_csv(results_part_3, "bootstrapping_reactions.csv")
+```
+
+# PLOTS - EFFECT POWER
+
+## theme settings
+
+```{r}
+library(tidyverse)
+library(patchwork)
+library(ggtext)
+
+theme_set(theme_minimal() + 
+            theme(legend.position = "bottom",   
+                  plot.title =  element_markdown(), 
+                  plot.subtitle =  element_markdown(),
+                  axis.title.x = element_text())
+          )
+```
+
+## (re)load data
+
+```{r}
+results <- read_csv("~/Documents/GitHub/nice_online_study/4_analysis/output/bootstrapping_crowding.csv")
+results_part_2 <- read_csv("/Users/panosmavros/Documents/GitHub/nice_online_study/4_analysis/output/bootstrapping_beauty.csv")
+results_part_3 <- read_csv("/Users/panosmavros/Documents/GitHub/nice_online_study/4_analysis/output/bootstrapping_reactions.csv")
+```
+
+```{r}
+formulas <- read_csv("/Users/panosmavros/Documents/GitHub/nice_online_study/4_analysis/output/formulas.csv")
+formulas <- unique(unlist(formulas))
+# write_csv(data.frame(formulas), file = "/Users/panosmavros/Documents/GitHub/nice_online_study/analysis/output/formulas.csv")
+
+formulas |> sort()
+
+# formulas <- formulas |> gsub(pattern = "Crowdedness", replacement = "Crowding")
+
+```
+
+## plot 1
+
+```{r}
+unique(results$param)
+unique(results$iv)
+
+for (iv_to_plot in unique(results$iv)) {
+  
+  try(rm(p_power, p_effect))
+
+  dv = "Crowding"
+  print(iv_to_plot)
+  
+mformula <- formulas %>% 
+  as_tibble() %>% 
+  filter(str_starts(string = value, pattern =  "Crowdedness")) %>% 
+  filter(str_detect(string = value, pattern = iv_to_plot)) %>% 
+  pull() |> gsub(pattern = "Crowdedness", replacement = "Subjective Crowding")
+  
+  p_power <- results %>%
+    filter(iv == iv_to_plot) %>%
+    group_by(n, param) %>%
+    summarise(m = mean(p),
+              e = mean(e),
+              pc = sum(p < 0.05)/ n()) %>%
+    ggplot(aes(x = as.factor(n), y = m,  group = param)) +
+  geom_jitter(aes(x = as.factor(n), y = p), size = 0.1, alpha = 0.2, data = results %>%
+                filter(iv == iv_to_plot)) +
+     geom_path(aes(x = as.factor(n), y = m,  group = param, linetype = "Mean p.val")) +      geom_point(aes(x = as.factor(n), y = m, group = param) ) +
+  geom_path(aes(x = as.factor(n), y = pc, group = param, linetype = 'Power'), colour = "blue") +
+  geom_point(aes(x = as.factor(n), y = pc, group = param), colour = "blue") +
+    geom_text(aes(x = as.factor(350), y = 0.1, label = "a = 0.05"), colour = 'red', hjust = 1, size = 3)+       
+    geom_text(aes(x = as.factor(350), y = 0.75, label = "80%"),  colour = 'blue',hjust = 1,  size = 3)+
+    geom_hline(yintercept = .05, colour = 'red') +
+    geom_hline(yintercept = .8,  colour = 'blue', linetype = "dashed") +
+
+    facet_wrap(. ~ param) +
+    theme_minimal() +
+    scale_y_continuous(
+      
+      # Features of the first axis
+      name = "Mean p.val",
+      
+      # Add a second axis and specify its features
+      sec.axis = sec_axis(~.*100, name="Power (percent p < .05)")
+    ) +
+    facet_wrap(.~param, scales = "free") +
+    theme(legend.position = "bottom", 
+           # axis.line.y.right = element_line(color = "blue"), 
+          axis.ticks.y.right = element_line(color = "blue"), 
+          axis.text.y.right = element_text(colour = "blue")) +
+    labs(x = "Sub-sample (N)", 
+         y = "", 
+         linetype = "Linetype",
+       title = "Power"
+         )
+  p_power
+  
+ p_effect <- results %>%
+    filter(iv == iv_to_plot) %>%
+    group_by(n, param) %>%
+    summarise(m = mean(p),
+              e = mean(e),
+              pc = sum(p < 0.05)/ n()) %>%
+    ggplot(aes(x = as.factor(n), y = e, group = param)) +
+    geom_jitter(aes(x = as.factor(n), y = e), size = 0.1, alpha = 0.2, data = results %>%   filter(iv == iv_to_plot)) +
+    # geom_path(aes(x = as.factor(n), y = m,  group = param, linetype = "Mean p.val")) +
+    geom_path() +
+    geom_point() +
+    # geom_path(aes(x = as.factor(n), y = pc, group = param, linetype = 'Percent p <.05'), ) +
+    # geom_hline(yintercept = .05, colour = 'red') +
+    facet_wrap(.~param, scales = "free") +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    labs(x = "Sub-sample (N)", y = "Standardised Coefficient",
+         linetype = "Linetype",
+         title = "Effect Size"
+
+         )
+
+p_effect
+  
+  p <- (p_effect | p_power) + plot_annotation(tag_levels = "A",
+    title = "**Posthoc effect & power analysis**",
+    # subtitle = glue::glue("Dependent Variable: {dv}, main Independent Variable: {iv_to_plot}"),
+    subtitle = glue::glue("Model: _{mformula}_"),
+  caption = "Posthoc power analysis with bootstrapping (100 simulations at each N, sub-sampling with replacement)")
+  # p
+  ggsave(p, filename = glue::glue("~/Documents/GitHub/nice_online_study/4_analysis/figures/posthoc_{dv}_by_{iv_to_plot}.jpg"),
+         scale = 2, width = 29, height = 21, limitsize = T, units = "cm")
+ }
+
+```
+
+## plot 2
+
+```{r}
+
+
+
+for (iv_to_plot in unique(results_part_2$iv)) {
+  
+  try(rm(p_power, p_effect))
+  
+  dv = "Beauty"
+
+  
+mformula <- formulas %>% 
+  as_tibble() %>% 
+  filter(str_starts(string = value, pattern =  dv)) %>% 
+  filter(str_detect(string = value, pattern = iv_to_plot)) %>% 
+  pull() |> gsub(pattern = "Crowdedness", replacement = "Subjective Crowding")
+
+print(mformula)
+
+  
+  p_power <- results_part_2 %>%
+    filter(iv == iv_to_plot) %>%
+    group_by(n, param) %>%
+    summarise(m = mean(p),
+              e = mean(e),
+              pc = sum(p < 0.05)/ n()) %>%
+    ggplot(aes(x = as.factor(n), y = m,  group = param)) +
+  geom_jitter(aes(x = as.factor(n), y = p), size = 0.1, alpha = 0.2, data = results_part_2 %>%
+                filter(iv == iv_to_plot)) +
+     geom_path(aes(x = as.factor(n), y = m,  group = param, linetype = "Mean p.val")) +      
+    geom_point(aes(x = as.factor(n), y = m, group = param) ) +
+  geom_path(aes(x = as.factor(n), y = pc, group = param, linetype = 'Percent p <.05'), ) +
+  geom_point(aes(x = as.factor(n), y = pc, group = param) ) +
+   geom_path(aes(x = as.factor(n), y = pc, group = param, linetype = 'Power'), colour = "blue") +
+  geom_point(aes(x = as.factor(n), y = pc, group = param), colour = "blue") +
+
+    geom_text(aes(x = as.factor(350), y = 0.1, label = "a = 0.05"), colour = 'red', hjust = 1, size = 3)+    
+    geom_text(aes(x = as.factor(350), y = 0.75, label = "80%"), colour = 'blue',hjust = 1,  size = 3)+
+    geom_hline(yintercept = .05, colour = 'red') +
+    geom_hline(yintercept = .8,  colour = 'blue', linetype = "dashed") +
+
+    facet_wrap(. ~ param) +
+    theme_minimal() +
+    scale_y_continuous(
+      
+      # Features of the first axis
+      name = "Mean p.val",
+      
+      # Add a second axis and specify its features
+      sec.axis = sec_axis(~.*100, name="Power (percent p < .05)")
+    ) +
+    facet_wrap(.~param, scales = "free") +
+    theme_minimal() +
+    theme(legend.position = "bottom",
+              axis.ticks.y.right = element_line(color = "blue"), 
+          axis.text.y.right = element_text(colour = "blue")) +
+    labs(x = "Sub-sample (N)", 
+         y = "", 
+         linetype = "Linetype",
+         title = "Power"
+         )
+
+
+  p_effect <- results_part_2 %>%
+    filter(iv == iv_to_plot) %>%
+    group_by(n, param) %>%
+    summarise(m = mean(p),
+              e = mean(e),
+              pc = sum(p < 0.05)/ n()) %>%
+    ggplot(aes(x = as.factor(n), y = e, group = param)) +
+    geom_jitter(aes(x = as.factor(n), y = e), size = 0.1, alpha = 0.2, data = results_part_2 %>%   filter(iv == iv_to_plot)) +
+    geom_path( ) +
+    geom_point() +
+    facet_wrap(.~param, scales = "free") +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    labs(x = "Sub-sample (N)", y = "Standardised Coefficient",
+         linetype = "Linetype",
+         title = "Effect size"
+       )
+  
+  p <- (p_effect | p_power) + plot_annotation(tag_levels = "A",
+    title = "**Posthoc effect & power analysis**",
+    subtitle = glue::glue("Model: _{mformula}_"),
+  caption = "Posthoc power analysis with bootstrapping (100 simulations at each N, sub-sampling with replacement)")
+  p
+  ggsave(p, filename = glue::glue("~/Documents/GitHub/nice_online_study/4_analysis/figures/posthoc_{dv}_by_{iv_to_plot}.jpg"),
+         scale = 2, width = 29, height = 21, limitsize = T, units = "cm")
+}
+
+```
+
+## plot 3
+
+```{r}
+
+for (dv_to_plot in unique(results_part_3$dv)) {
+
+  try(rm(p_power, p_effect))
+
+
+mformula <- formulas %>% 
+  as_tibble() %>% 
+  filter(str_starts(string = value, pattern =  dv_to_plot)) %>% 
+  pull() |> gsub(pattern = "Crowdedness", replacement = "Subjective Crowding")
+
+
+print(mformula)
+
+
+  p_power <- results_part_3 %>%
+    filter(dv == dv_to_plot) %>%
+    group_by(n, param) %>%
+    summarise(m = mean(p),
+              e = mean(e),
+              pc = sum(p < 0.05)/ n()) %>%
+    ggplot(aes(x = as.factor(n), y = m,  group = param)) +
+  geom_jitter(aes(x = as.factor(n), y = p), size = 0.1, alpha = 0.2, data = results_part_3 %>%
+                filter(dv == dv_to_plot)) +
+     geom_path(aes(x = as.factor(n), y = m,  group = param, linetype = "Mean p.val")) +      
+    geom_point(aes(x = as.factor(n), y = m, group = param) ) +
+    
+    geom_path(aes(x = as.factor(n), y = pc, group = param, linetype = 'Power'), colour = "blue") +
+  geom_point(aes(x = as.factor(n), y = pc, group = param), colour = "blue") +
+   
+    geom_text(aes(x = as.factor(350), y = 0.1, label = "a = 0.05"), colour = 'red', hjust = 1, size = 3)+       
+    geom_text(aes(x = as.factor(350), y = 0.75, label = "80%"),  colour = 'blue',hjust = 1,  size = 3)+
+    geom_hline(yintercept = .05, colour = 'red') +
+    geom_hline(yintercept = .8,  colour = 'blue', linetype = "dashed") +
+
+    facet_wrap(. ~ param) +
+    theme_minimal() +
+    scale_y_continuous(
+      
+      # Features of the first axis
+      name = "Mean p.val",
+      
+      # Add a second axis and specify its features
+      sec.axis = sec_axis(~.*100, name="Power (percent p < .05)")
+    ) +
+    facet_wrap(.~param, scales = "free") +
+    theme(legend.position = "bottom",
+              axis.ticks.y.right = element_line(color = "blue"), 
+          axis.text.y.right = element_text(colour = "blue")) +
+    labs(x = "Sub-sample (N)", 
+         y = "", 
+         linetype = "Linetype",
+         title = "Power"
+         )
+
+
+  p_effect <- results_part_3 %>%
+    filter(dv == dv_to_plot) %>%
+    group_by(n, param) %>%
+    summarise(m = mean(p),
+              e = mean(e),
+              pc = sum(p < 0.05)/ n()) %>%
+    ggplot(aes(x = as.factor(n), y = e, group = param)) +
+    geom_jitter(aes(x = as.factor(n), y = e), size = 0.1, alpha = 0.2, data = results_part_3 %>%   
+                  filter(dv == dv_to_plot)) +
+    geom_path( ) +
+    geom_point() +
+    facet_wrap(.~param, scales = "free") +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    labs(x = "Sub-sample (N)", y = "Standardised Coefficient",
+         linetype = "Linetype",
+         title = "Effect size"
+         )
+  
+  p <- (p_effect | p_power) + 
+    plot_annotation(tag_levels = "A",
+    title = "**Posthoc effect & power analysis**",
+    subtitle = glue::glue("Model: _{mformula}_"),
+    caption = "Posthoc power analysis with bootstrapping (100 simulations at each N, sub-sampling with replacement)")
+  p
+  ggsave(p, filename = glue::glue("~/Documents/GitHub/nice_online_study/4_analysis/figures/posthoc_{dv_to_plot}.jpg"),
+         scale = 2, width = 29, height = 21, limitsize = T, units = "cm")
+}
+
+```
+
+# PLOTS for PAPER
+
+One plot for the manuscript, with the key variables of interest in terms of power, effect size
+
+```{r}
+
+# data subset
+# beauty as an effect on subjective crowding
+# main_plot_1_data <- results %>%
+#   group_by(iv, n, param) %>%
+#   summarise(m = mean(p),
+#             `Effect Size (Std. Coef.)` = mean(e),
+#             Power = sum(p < 0.05)/ n()) %>%
+#     filter(iv == "Beauty", str_detect(param, "Beauty"))
+# 
+# main_plot_2_data <- results_part_2 %>%
+#   group_by(iv, n, param) %>%
+#   summarise(m = mean(p),
+#             `Effect Size (Std. Coef.)` = mean(e),
+#             Power = sum(p < 0.05)/ n()) %>%
+#   ungroup() %>%
+#   filter(iv == 'Crowdedness', param == "poly(Crowdedness, 2)2")
+
+
+
+
+```
+
+```{r}
+# subplot 3 WillingnessToWalk ~ crowding
+m3.1 <-  results_part_3 %>%
+  group_by(dv, n, param) %>%
+  summarise(m = mean(p),
+            `Effect Size (Std. Coef.)` = mean(e),
+            Power = sum(p < 0.05)/ n()) %>%
+  ungroup() %>%
+  filter(dv %in% c("WillingnessToWalk", "Valence"), 
+         param %in% c( "Typologyurban:poly(Crowdedness, 2)2:Beauty", 
+                       "Typologygreen:poly(Crowdedness, 2)2:Beauty")) %>% 
+  mutate(Typology = if_else(str_detect(param, "urban"), "urban", "green")) %>% 
+  filter(dv == "WillingnessToWalk") %>% 
+  ggplot(aes(x = n, group = Typology, colour = Typology)) +
+    geom_path(aes( y = `Effect Size (Std. Coef.)`)) +
+    geom_point(aes( y = `Effect Size (Std. Coef.)`))+
+    scale_x_continuous(breaks = seq(0, 370, by = 50))+
+      scale_color_discrete(type =c(col_green, col_urban))+
+    labs(x = "") +theme(legend.position = "none")
+m3.1
+
+m3.2 <-   results_part_3 %>%
+  group_by(dv, n, param) %>%
+  summarise(m = mean(p),
+            `Effect Size (Std. Coef.)` = mean(e),
+            Power = sum(p < 0.05)/ n()) %>%
+  ungroup() %>%
+  filter(dv %in% c("WillingnessToWalk", "Valence"), 
+         param %in% c( "Typologyurban:poly(Crowdedness, 2)2:Beauty", 
+                       "Typologygreen:poly(Crowdedness, 2)2:Beauty")) %>% 
+  mutate(Typology = if_else(str_detect(param, "urban"), "urban", "green")) %>% 
+  filter(dv == "WillingnessToWalk") %>% 
+  ggplot(aes(x = n, group = Typology, colour = Typology)) +
+    geom_path(aes( y = m,  group = param, linetype = "Mean p.val")) +
+    geom_path(aes( y = Power, group = param, linetype = 'Percent p <.05') ) +
+    geom_point(aes(y = m))+
+    geom_point(aes(y = Power))+
+     geom_hline(yintercept = .05, colour = 'black', linetype = 'dashed') +
+    geom_text(aes(x = 350, y = 0.08, label = "a = 0.05"), size = 3, hjust = 1, colour = "black")+
+  
+    geom_hline(yintercept = .8, colour = 'black', linetype = 'dashed') +
+    geom_text(aes(x = 350, y = 0.77, label = "80%"), size = 3, hjust = 1, colour = "black")+
+   
+  scale_y_continuous(name = "Mean p.val", sec.axis = sec_axis(~.*100, name="Power (percent p < .05")) +
+      scale_x_continuous(breaks = seq(0, 370, by = 50))+
+  scale_color_discrete(type =c(col_green, col_urban))+
+    labs(x = "Sub-sample (N)",  linetype = "Linetype")+theme(legend.position = "none")
+
+
+m3.2    
+
+m3 <- m3.1 / m3.2 
+m3 
+```
+
+```{r}
+# subplot 4 valence ~ crowding
+m4.1 <-   results_part_3 %>%
+  group_by(dv, n, param) %>%
+  summarise(m = mean(p),
+            `Effect Size (Std. Coef.)` = mean(e),
+            Power = sum(p < 0.05)/ n()) %>%
+  ungroup() %>%
+  filter(dv %in% c("WillingnessToWalk", "Valence"), 
+         param %in% c( "Typologyurban:poly(Crowdedness, 2)2:Beauty", 
+                       "Typologygreen:poly(Crowdedness, 2)2:Beauty")) %>% 
+  mutate(Typology = if_else(str_detect(param, "urban"), "urban", "green")) %>% 
+      filter(dv == "Valence") %>%
+    ggplot(aes(x = n, y = `Effect Size (Std. Coef.)`, group = Typology, colour = Typology)) +
+    geom_path( ) +
+    geom_point()+
+      scale_x_continuous(breaks = seq(0, 370, by = 50))+
+    scale_color_discrete(type =c(col_green, col_urban))+
+    labs(x = "")+theme(legend.position = "none") #, title = "Valence ~ Urban * Crowding * Beauty") 
+m4.1
+
+m4.2 <-    results_part_3 %>%
+  group_by(dv, n, param) %>%
+  summarise(m = mean(p),
+            `Effect Size (Std. Coef.)` = mean(e),
+            Power = sum(p < 0.05)/ n()) %>%
+  ungroup() %>%
+  filter(dv %in% c("WillingnessToWalk", "Valence"), 
+         param %in% c( "Typologyurban:poly(Crowdedness, 2)2:Beauty", 
+                       "Typologygreen:poly(Crowdedness, 2)2:Beauty")) %>% 
+  mutate(Typology = if_else(str_detect(param, "urban"), "urban", "green")) %>% 
+    filter(dv == "Valence") %>% 
+    ggplot(aes(x = n, group = Typology, colour = Typology)) +
+    geom_path(aes(y = m,  group = param, linetype = "Mean p.val")) +
+    geom_path(aes(y = Power, group = param, linetype = 'Percent p <.05') ) +
+      geom_point(aes(y = m))+
+        geom_point(aes(y = Power))+
+    geom_hline(yintercept = .05, colour = 'black', linetype = 'dashed') +
+    geom_text(aes(x = 350, y = 0.08, label = "a = 0.05"), size = 3, hjust = 1, colour = "black")+
+  
+    geom_hline(yintercept = .8, colour = 'black', linetype = 'dashed') +
+    geom_text(aes(x = 350, y = 0.77, label = "80%"), size = 3, hjust = 1, colour = "black")+
+   
+    scale_x_continuous(breaks = seq(0, 370, by = 50))+
+    scale_color_discrete(type =c(col_green, col_urban))+
+
+    scale_y_continuous(name = "Mean p.val", sec.axis = sec_axis(~.*100, name="Power (percent p < .05")) +
+    labs(x = "Sub-sample (N)",  linetype = "Linetype")
+m4.2
+
+m4 <- (m4.1 / m4.2 ) 
+m4
+
+m <-( m3.1 / m3.2 +theme(legend.position = "none") + plot_layout(tag_level = 'new')) | (( m4.1 / m4.2) + plot_layout(tag_level = 'new')) 
+
+m <- m + plot_annotation(tag_levels =   c("A", "1"), title = "Post-hoc Power analysis", subtitle = "Interaction of Beauty x Crowding on Willingness to walk (A) and Valence (B)",
+                         caption = "Bootstrapping 100 simulations at each N, sub-sampling with replacement")
+
+m
+
+ggsave(m, filename = "~/Documents/GitHub/nice_online_study/4_analysis/figures/posthoc_effect_mainplot.jpg",
+         scale = 2, width = 15, height = 8, limitsize = T, units = "cm")
+
+```
